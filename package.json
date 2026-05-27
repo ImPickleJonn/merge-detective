@@ -1,0 +1,12 @@
+{
+  "name": "merge-detective",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Merge Detective — solve mysteries by merging clues. Telegram Mini App.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

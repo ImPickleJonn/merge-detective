@@ -1,0 +1,2037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#FDF6E3">
+<title>Merge Detective</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body {
+    font-family: 'Quicksand', 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
+    background: #FDF6E3;
+    color: #2A1B1F;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  #app {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(255,196,214,0.15), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(168,224,240,0.12), transparent 45%),
+      #FDF6E3;
+  }
+  /* Paper grain texture */
+  #app::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(124,45,63,0.015) 0 2px, transparent 2px 5px),
+      repeating-linear-gradient(-45deg, rgba(45,95,79,0.015) 0 2px, transparent 2px 5px);
+    z-index: 1;
+  }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; z-index: 2; }
+  .hidden { display: none !important; }
+
+  /* ============ SPLASH ============ */
+  #splash {
+    align-items: center; justify-content: center;
+    background:
+      radial-gradient(circle at 50% 40%, #FFF3E0, transparent 60%),
+      linear-gradient(180deg, #FDF6E3 0%, #FFE8D0 100%);
+    text-align: center; padding: 20px;
+    z-index: 10;
+  }
+  #splash-mascot {
+    width: 240px; height: 240px;
+    animation: float 3s ease-in-out infinite;
+    filter: drop-shadow(0 8px 20px rgba(124,45,63,0.25));
+  }
+  #splash-mascot.tip-hat .hat-group { animation: tipHat 1.5s ease-out; transform-origin: 100px 60px; }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  @keyframes tipHat { 0% { transform: rotate(0) translateY(0); } 30% { transform: rotate(-15deg) translateY(-10px); } 60% { transform: rotate(-15deg) translateY(-10px); } 100% { transform: rotate(0) translateY(0); } }
+  #splash-title {
+    font-size: 44px; font-weight: 900; color: #7C2D3F;
+    text-shadow: 3px 3px 0 #FFE4D6, 6px 6px 0 rgba(124,45,63,0.15);
+    margin: 20px 0 6px; letter-spacing: -1px;
+    transform: rotate(-2deg);
+  }
+  #splash-subtitle {
+    font-size: 16px; color: #2D5F4F; font-weight: 600;
+    margin-bottom: 28px; opacity: 0.85;
+  }
+  .btn-primary {
+    background: linear-gradient(180deg, #D4A444 0%, #B8861F 100%);
+    color: white; border: none; border-radius: 18px;
+    padding: 16px 40px; font-size: 20px; font-weight: 800;
+    font-family: inherit; cursor: pointer;
+    box-shadow: 0 6px 0 #8B6418, 0 8px 20px rgba(212,164,68,0.4);
+    transition: transform 0.1s, box-shadow 0.1s;
+    letter-spacing: 0.5px;
+  }
+  .btn-primary:active { transform: translateY(4px); box-shadow: 0 2px 0 #8B6418, 0 4px 10px rgba(212,164,68,0.3); }
+  .btn-secondary {
+    background: white; color: #7C2D3F;
+    border: 3px solid #7C2D3F; border-radius: 14px;
+    padding: 12px 24px; font-size: 16px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+    box-shadow: 0 4px 0 #5A1F2F;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .btn-secondary:active { transform: translateY(3px); box-shadow: 0 1px 0 #5A1F2F; }
+
+  /* ============ GAME LAYOUT ============ */
+  #game-screen { padding: 0; }
+  #topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px 6px;
+    background: linear-gradient(180deg, rgba(255,228,214,0.7), transparent);
+    z-index: 5;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 6px;
+    background: white; border: 2px solid #7C2D3F;
+    padding: 6px 12px 6px 8px; border-radius: 20px;
+    font-weight: 800; color: #2A1B1F;
+    box-shadow: 0 3px 0 #7C2D3F;
+    font-size: 14px;
+  }
+  .pill svg { width: 22px; height: 22px; flex-shrink: 0; }
+  .pill-stars { border-color: #D4A444; box-shadow: 0 3px 0 #D4A444; color: #8B6418; }
+  .pill-coins { border-color: #E8B647; box-shadow: 0 3px 0 #B8861F; }
+  .pill-energy { border-color: #2D5F4F; box-shadow: 0 3px 0 #2D5F4F; color: #2D5F4F; }
+  .topbar-left { display: flex; gap: 8px; }
+  .topbar-right { display: flex; gap: 8px; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: white; border: 2px solid #7C2D3F;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 3px 0 #7C2D3F;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #7C2D3F; }
+  .icon-btn svg { width: 22px; height: 22px; }
+
+  /* ============ CASE BOARD ============ */
+  #case-board {
+    margin: 4px 12px 8px;
+    background: linear-gradient(180deg, #C49065 0%, #A8784F 100%);
+    border-radius: 16px;
+    padding: 10px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 4px 12px rgba(124,45,63,0.2);
+    position: relative;
+    overflow: visible;
+    border: 3px solid #8B6418;
+  }
+  #case-board::before {
+    content: ''; position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 25% 25%, rgba(0,0,0,0.06) 0 2px, transparent 2px),
+      radial-gradient(circle at 75% 70%, rgba(0,0,0,0.06) 0 2px, transparent 2px),
+      radial-gradient(circle at 50% 90%, rgba(255,255,255,0.06) 0 2px, transparent 2px);
+    background-size: 30px 30px, 40px 40px, 50px 50px;
+    border-radius: 13px; pointer-events: none;
+  }
+  .case-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px; position: relative; z-index: 2;
+  }
+  .case-title-card {
+    background: #FFF8E8; padding: 6px 14px;
+    border-radius: 6px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(124,45,63,0.15);
+    transform: rotate(-1.5deg);
+    font-weight: 800; font-size: 14px; color: #7C2D3F;
+    border-left: 4px solid #7C2D3F;
+    max-width: 70%;
+  }
+  .case-title-card .case-num { font-size: 10px; color: #8B6418; font-weight: 700; }
+  .case-progress {
+    background: rgba(255,255,255,0.9); padding: 4px 10px;
+    border-radius: 12px; font-size: 12px; font-weight: 800;
+    color: #2D5F4F; display: flex; align-items: center; gap: 4px;
+  }
+  .clue-pin-area {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    min-height: 56px;
+    position: relative; z-index: 2;
+    align-content: flex-start;
+  }
+  .clue-pin {
+    width: 50px; height: 50px;
+    background: #FFF8E8;
+    border-radius: 6px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(124,45,63,0.15);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    animation: pinDown 0.4s ease-out;
+    transform-origin: top center;
+  }
+  .clue-pin:nth-child(odd) { transform: rotate(-3deg); }
+  .clue-pin:nth-child(even) { transform: rotate(2deg); }
+  .clue-pin::before {
+    content: ''; position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #FF6B8B, #B22D4F);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.4);
+    z-index: 2;
+  }
+  .clue-pin svg { width: 36px; height: 36px; }
+  @keyframes pinDown {
+    0% { transform: translateY(-30px) scale(1.3) rotate(0); opacity: 0; }
+    60% { transform: translateY(4px) scale(0.95) rotate(0); opacity: 1; }
+    100% { transform: translateY(0) scale(1) rotate(var(--rot, 0deg)); opacity: 1; }
+  }
+  .clue-pin-empty {
+    width: 50px; height: 50px;
+    border: 2px dashed rgba(255,255,255,0.4);
+    border-radius: 6px;
+  }
+
+  /* ============ MERGE BOARD ============ */
+  #merge-wrap {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 4px 12px;
+    position: relative;
+  }
+  #merge-board {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-rows: repeat(6, 1fr);
+    gap: 4px;
+    width: min(95vw, 380px);
+    aspect-ratio: 1;
+    background: linear-gradient(135deg, #5A8B7A 0%, #3D6B5A 100%);
+    padding: 8px; border-radius: 18px;
+    box-shadow: inset 0 4px 8px rgba(0,0,0,0.25), 0 6px 20px rgba(45,95,79,0.3);
+    border: 3px solid #2D5F4F;
+    position: relative;
+  }
+  .grid-cell {
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    transition: background 0.15s;
+  }
+  .grid-cell.selected { background: rgba(255,228,128,0.45); box-shadow: inset 0 0 0 2px #FFD54F; }
+  .grid-cell.hint-target { background: rgba(255,255,255,0.25); animation: pulseTarget 0.8s infinite; }
+  @keyframes pulseTarget { 0%,100% { background: rgba(255,255,255,0.2); } 50% { background: rgba(255,255,255,0.4); } }
+  .merge-item {
+    width: 88%; height: 88%;
+    background: white;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.15), 0 4px 6px rgba(0,0,0,0.15);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+  }
+  .merge-item.t1 { background: linear-gradient(135deg, #FFF, #FFE8DC); }
+  .merge-item.t2 { background: linear-gradient(135deg, #FFF, #FFD4BC); }
+  .merge-item.t3 { background: linear-gradient(135deg, #FFE8DC, #FFB48C); box-shadow: 0 3px 0 #B8866A, 0 4px 6px rgba(0,0,0,0.15); }
+  .merge-item.t4 { background: linear-gradient(135deg, #FFD4BC, #FF8C5C); box-shadow: 0 3px 0 #8B6418, 0 6px 10px rgba(255,140,92,0.3); }
+  .merge-item.t5 { background: linear-gradient(135deg, #FFE066, #D4A444); box-shadow: 0 3px 0 #8B6418, 0 6px 14px rgba(255,224,102,0.5); animation: goldGlow 2s ease-in-out infinite; }
+  @keyframes goldGlow { 0%,100% { box-shadow: 0 3px 0 #8B6418, 0 6px 14px rgba(255,224,102,0.5); } 50% { box-shadow: 0 3px 0 #8B6418, 0 6px 22px rgba(255,224,102,0.9); } }
+  .merge-item svg { width: 72%; height: 72%; }
+  .merge-item.picked { transform: scale(1.15) translateY(-4px); box-shadow: 0 8px 0 rgba(0,0,0,0.15), 0 10px 14px rgba(0,0,0,0.25); z-index: 10; }
+  .merge-item.spawn-in { animation: spawnIn 0.35s ease-out; }
+  @keyframes spawnIn {
+    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+    70% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+  }
+  .merge-item.merging { animation: mergeOut 0.25s ease-in forwards; }
+  @keyframes mergeOut { to { transform: scale(0); opacity: 0; } }
+  .merge-item.merged-in { animation: mergedIn 0.45s ease-out; }
+  @keyframes mergedIn {
+    0% { transform: scale(0.3); opacity: 0.5; filter: brightness(2); }
+    60% { transform: scale(1.3); filter: brightness(1.5); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+  .merge-item .tier-badge {
+    position: absolute; top: -3px; right: -3px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #7C2D3F; color: white;
+    font-size: 10px; font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid white;
+    z-index: 2;
+  }
+  .merge-item.submittable::after {
+    content: ''; position: absolute; inset: -4px;
+    border: 2px dashed #FFD54F; border-radius: 12px;
+    animation: dashSpin 4s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes dashSpin { to { transform: rotate(360deg); } }
+
+  /* ============ SPAWNERS ============ */
+  #spawners {
+    display: flex; gap: 8px; margin-top: 10px;
+    justify-content: center;
+  }
+  .spawner {
+    width: 64px; height: 64px;
+    background: white;
+    border: 3px solid #7C2D3F;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #7C2D3F, 0 6px 8px rgba(0,0,0,0.15);
+    transition: transform 0.1s, box-shadow 0.1s;
+    position: relative;
+    overflow: visible;
+  }
+  .spawner:active { transform: translateY(2px); box-shadow: 0 2px 0 #7C2D3F, 0 3px 4px rgba(0,0,0,0.15); }
+  .spawner.disabled { opacity: 0.4; cursor: not-allowed; box-shadow: 0 4px 0 #888; border-color: #888; }
+  .spawner > svg { width: 80%; height: 80%; }
+  .spawner-cost {
+    position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
+    background: #2D5F4F; color: white;
+    font-size: 11px; font-weight: 900;
+    border-radius: 10px; padding: 2px 8px;
+    border: 2px solid white;
+    display: flex; align-items: center; gap: 2px;
+    line-height: 1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  /* ============ DEDUCE BUTTON ============ */
+  #deduce-cta {
+    position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(180deg, #FF6B8B 0%, #B22D4F 100%);
+    color: white; font-weight: 900; font-size: 16px;
+    padding: 12px 28px; border-radius: 24px;
+    border: 3px solid white;
+    box-shadow: 0 6px 0 #7C2D3F, 0 10px 20px rgba(178,45,79,0.4);
+    cursor: pointer;
+    animation: ctaBob 0.8s ease-in-out infinite;
+    z-index: 20;
+    display: flex; align-items: center; gap: 8px;
+  }
+  @keyframes ctaBob { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-6px); } }
+  #deduce-cta:active { animation: none; transform: translateX(-50%) translateY(4px); box-shadow: 0 2px 0 #7C2D3F; }
+  #deduce-cta svg { width: 22px; height: 22px; }
+
+  /* ============ MODALS ============ */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(42,27,31,0.7);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 20px;
+    animation: modalFade 0.25s ease-out;
+  }
+  @keyframes modalFade { from { opacity: 0; } }
+  .modal-card {
+    background: #FDF6E3;
+    border-radius: 24px;
+    padding: 24px 20px;
+    max-width: 420px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    border: 4px solid #7C2D3F;
+    animation: modalPop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1);
+    position: relative;
+  }
+  @keyframes modalPop { from { transform: scale(0.5) translateY(60px); opacity: 0; } }
+  .modal-title {
+    font-size: 22px; font-weight: 900; color: #7C2D3F;
+    text-align: center; margin: 0 0 12px;
+    text-shadow: 2px 2px 0 #FFE4D6;
+  }
+  .modal-close {
+    position: absolute; top: 12px; right: 12px;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #7C2D3F; color: white; border: none;
+    font-size: 16px; font-weight: 900; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ============ DEDUCTION MODAL ============ */
+  .deduction-intro {
+    text-align: center;
+    font-size: 14px; font-weight: 700; color: #2D5F4F;
+    margin-bottom: 16px;
+    background: rgba(45,95,79,0.08);
+    padding: 10px 12px; border-radius: 12px;
+    border-left: 4px solid #2D5F4F;
+  }
+  .clue-summary {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-bottom: 16px;
+  }
+  .clue-summary-item {
+    display: flex; align-items: center; gap: 8px;
+    background: #FFF8E8;
+    padding: 8px 12px; border-radius: 10px;
+    font-size: 13px; color: #2A1B1F;
+    border-left: 3px solid #D4A444;
+    box-shadow: 0 2px 4px rgba(124,45,63,0.08);
+  }
+  .clue-summary-item svg { width: 24px; height: 24px; flex-shrink: 0; }
+  .suspects-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-bottom: 8px;
+  }
+  .suspect-card {
+    background: white;
+    border-radius: 14px;
+    padding: 8px 6px;
+    text-align: center;
+    cursor: pointer;
+    border: 3px solid transparent;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    position: relative;
+  }
+  .suspect-card:active { transform: scale(0.95); }
+  .suspect-card.accuse { border-color: #B22D4F; background: #FFE4DC; transform: scale(1.05); box-shadow: 0 8px 16px rgba(178,45,79,0.3); }
+  .suspect-portrait { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+  .suspect-portrait svg { width: 100%; height: 100%; }
+  .suspect-name { font-size: 11px; font-weight: 800; color: #7C2D3F; margin-top: 4px; line-height: 1.2; }
+  .suspect-tag { font-size: 9px; color: #2D5F4F; font-weight: 600; margin-top: 2px; opacity: 0.7; }
+  .accuse-btn {
+    width: 100%;
+    background: linear-gradient(180deg, #B22D4F 0%, #7C2D3F 100%);
+    color: white; font-weight: 900; font-size: 16px;
+    padding: 14px; border-radius: 14px;
+    border: none; cursor: pointer;
+    box-shadow: 0 5px 0 #5A1F2F;
+    transition: transform 0.1s, box-shadow 0.1s;
+    margin-top: 10px;
+  }
+  .accuse-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .accuse-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 #5A1F2F; }
+
+  /* ============ CASE SOLVED ============ */
+  #solved-modal { position: fixed; inset: 0; z-index: 200; pointer-events: none; }
+  #solved-modal.show { pointer-events: auto; }
+  .solved-bg {
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at center, rgba(212,164,68,0.4), rgba(42,27,31,0.85));
+    opacity: 0; transition: opacity 0.4s;
+  }
+  #solved-modal.show .solved-bg { opacity: 1; }
+  .solved-stamp {
+    position: absolute; top: 30%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-15deg) scale(0);
+    background: white;
+    border: 6px solid #B22D4F;
+    color: #B22D4F;
+    font-size: 64px; font-weight: 900;
+    padding: 14px 40px;
+    letter-spacing: 4px;
+    box-shadow: 0 0 0 4px white, 0 0 30px rgba(178,45,79,0.6), 0 20px 40px rgba(0,0,0,0.5);
+    border-radius: 8px;
+    font-family: 'Impact', 'Arial Black', sans-serif;
+  }
+  #solved-modal.show .solved-stamp { animation: stampSlam 0.6s cubic-bezier(0.5, 1.8, 0.3, 1) forwards; }
+  @keyframes stampSlam {
+    0% { transform: translate(-50%, -150%) rotate(-25deg) scale(3); opacity: 0; }
+    60% { transform: translate(-50%, -45%) rotate(-12deg) scale(0.85); opacity: 1; }
+    80% { transform: translate(-50%, -50%) rotate(-15deg) scale(1.1); }
+    100% { transform: translate(-50%, -50%) rotate(-15deg) scale(1); opacity: 1; }
+  }
+  .solved-reward {
+    position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center;
+    opacity: 0; transition: opacity 0.4s 0.6s;
+  }
+  #solved-modal.show .solved-reward { opacity: 1; }
+  .solved-reward-row {
+    display: inline-flex; gap: 20px;
+    background: white; padding: 14px 24px;
+    border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    border: 3px solid #D4A444;
+    margin-bottom: 14px;
+  }
+  .reward-item {
+    display: flex; align-items: center; gap: 6px;
+    font-weight: 900; font-size: 24px; color: #7C2D3F;
+  }
+  .reward-item svg { width: 36px; height: 36px; }
+  .solved-mascot {
+    width: 140px; height: 140px;
+    animation: mascotDance 0.5s ease-in-out infinite alternate;
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.3));
+    display: inline-block;
+  }
+  @keyframes mascotDance { from { transform: rotate(-10deg) translateY(0); } to { transform: rotate(10deg) translateY(-8px); } }
+  .solved-next {
+    margin-top: 14px;
+  }
+
+  /* ============ CASE-WRONG ============ */
+  .wrong-shake { animation: cardShake 0.5s; }
+  @keyframes cardShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+
+  /* ============ FTUE OVERLAY ============ */
+  #ftue {
+    position: absolute; inset: 0; z-index: 80;
+    background: rgba(42,27,31,0.5);
+    backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .ftue-bubble {
+    background: white; border: 3px solid #7C2D3F;
+    border-radius: 22px;
+    padding: 18px 18px 14px;
+    max-width: 320px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    position: relative;
+    text-align: center;
+  }
+  .ftue-mascot {
+    width: 80px; height: 80px;
+    margin: -50px auto 6px;
+    background: #FDF6E3;
+    border-radius: 50%;
+    border: 3px solid #7C2D3F;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ftue-mascot svg { width: 90%; height: 90%; }
+  .ftue-text {
+    font-size: 14px; font-weight: 700; color: #2A1B1F;
+    line-height: 1.4; margin: 8px 0 14px;
+  }
+  .ftue-text strong { color: #B22D4F; }
+  .ftue-btn {
+    background: #2D5F4F; color: white;
+    border: none; border-radius: 12px;
+    padding: 10px 24px; font-weight: 800; font-size: 15px;
+    cursor: pointer; box-shadow: 0 4px 0 #1D4F3F;
+  }
+  .ftue-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #1D4F3F; }
+
+  /* ============ CONFETTI / FX ============ */
+  .fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 150; overflow: hidden; }
+  .confetti {
+    position: absolute; width: 10px; height: 14px;
+    animation: confettiFall 2.5s linear forwards;
+  }
+  @keyframes confettiFall {
+    0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0.4; }
+  }
+  .coin-fly {
+    position: absolute; width: 28px; height: 28px;
+    animation: coinFly 1.2s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  }
+  @keyframes coinFly {
+    0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translate(var(--dx, 0), var(--dy, 100px)) scale(1.2) rotate(720deg); opacity: 1; }
+  }
+  .merge-spark {
+    position: absolute; pointer-events: none;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #FFE066, #D4A444);
+    box-shadow: 0 0 8px #FFE066;
+    animation: sparkOut 0.6s ease-out forwards;
+  }
+  @keyframes sparkOut {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--sx,0px)), calc(-50% + var(--sy,0px))) scale(0); opacity: 0; }
+  }
+  .floating-text {
+    position: fixed; pointer-events: none;
+    font-weight: 900; font-size: 18px;
+    color: #D4A444;
+    text-shadow: 2px 2px 0 #7C2D3F, 0 0 10px rgba(212,164,68,0.6);
+    animation: floatUp 1.2s ease-out forwards;
+    z-index: 160;
+  }
+  @keyframes floatUp {
+    0% { transform: translate(-50%, 0) scale(0.5); opacity: 0; }
+    20% { transform: translate(-50%, -10px) scale(1.2); opacity: 1; }
+    100% { transform: translate(-50%, -80px) scale(1); opacity: 0; }
+  }
+
+  /* ============ SHOP / MENU PANELS ============ */
+  .panel { margin: 8px 0; padding: 12px; background: white; border-radius: 14px; border: 2px solid #FFD4BC; }
+  .panel-h { font-size: 14px; font-weight: 800; color: #7C2D3F; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .shop-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #FFF8E8; padding: 10px 12px; border-radius: 10px;
+    margin-bottom: 6px;
+  }
+  .shop-info { display: flex; align-items: center; gap: 10px; }
+  .shop-info svg { width: 32px; height: 32px; flex-shrink: 0; }
+  .shop-info .shop-text { font-weight: 800; font-size: 13px; color: #2A1B1F; }
+  .shop-info .shop-sub { font-size: 11px; color: #8B6418; font-weight: 600; }
+  .shop-btn {
+    background: linear-gradient(180deg, #D4A444 0%, #B8861F 100%);
+    color: white; font-weight: 800; font-size: 13px;
+    border: none; border-radius: 10px;
+    padding: 8px 12px; cursor: pointer;
+    box-shadow: 0 3px 0 #8B6418;
+    display: flex; align-items: center; gap: 4px;
+    white-space: nowrap;
+  }
+  .shop-btn svg { width: 16px; height: 16px; }
+  .shop-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #8B6418; }
+
+  /* ============ TOAST ============ */
+  #toast {
+    position: fixed; top: 70px; left: 50%; transform: translateX(-50%) translateY(-100px);
+    background: #2A1B1F; color: white;
+    padding: 10px 18px; border-radius: 20px;
+    font-weight: 700; font-size: 14px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    z-index: 300; transition: transform 0.3s;
+    border: 2px solid #D4A444;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-height: 700px) {
+    #splash-mascot { width: 180px; height: 180px; }
+    #splash-title { font-size: 36px; }
+    #merge-board { width: min(90vw, 340px); }
+    .case-title-card { font-size: 13px; padding: 5px 12px; }
+    .clue-pin { width: 44px; height: 44px; }
+    .clue-pin svg { width: 30px; height: 30px; }
+  }
+  @media (max-width: 380px) {
+    #merge-board { gap: 3px; padding: 6px; }
+    .spawner { width: 58px; height: 58px; }
+    .spawner > svg { width: 78%; height: 78%; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- SPLASH -->
+  <div id="splash" class="screen">
+    <svg id="splash-mascot" viewBox="0 0 200 220"></svg>
+    <h1 id="splash-title">Merge Detective</h1>
+    <p id="splash-subtitle" data-i18n="splash_sub">Solve the unsolvable. One clue at a time.</p>
+    <button class="btn-primary" id="splash-start" data-i18n="splash_start">Start Investigating</button>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game-screen" class="screen hidden">
+    <div id="topbar">
+      <div class="topbar-left">
+        <div class="pill pill-coins" id="pill-coins" data-action="shop">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#D4A444" stroke="#8B6418" stroke-width="1.5"/><circle cx="12" cy="12" r="6.5" fill="#FFE066" stroke="#8B6418" stroke-width="1"/><text x="12" y="16" text-anchor="middle" font-size="9" font-weight="900" fill="#8B6418">$</text></svg>
+          <span id="coin-count">0</span>
+        </div>
+        <div class="pill pill-stars" id="pill-stars" data-action="shop">
+          <svg viewBox="0 0 24 24"><path d="M12 2 L14.5 9 L22 9.5 L16 14.5 L18 22 L12 17.8 L6 22 L8 14.5 L2 9.5 L9.5 9 Z" fill="#FFD54F" stroke="#8B6418" stroke-width="1.5"/></svg>
+          <span id="star-count">0</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="pill pill-energy">
+          <svg viewBox="0 0 24 24"><path d="M13 2 L4 14 L11 14 L9 22 L19 9 L12 9 Z" fill="#FFD54F" stroke="#7C2D3F" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <span id="energy-count">0</span><span style="opacity:0.5">/30</span>
+        </div>
+        <button class="icon-btn" id="btn-shop" aria-label="Shop">
+          <svg viewBox="0 0 24 24"><path d="M5 8 L19 8 L17.5 20 L6.5 20 Z" fill="#FFE066" stroke="#7C2D3F" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 8 V6 A4 4 0 0 1 16 6 V8" fill="none" stroke="#7C2D3F" stroke-width="1.5"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-menu" aria-label="Menu">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2" fill="#7C2D3F"/><circle cx="12" cy="12" r="2" fill="#7C2D3F"/><circle cx="12" cy="18" r="2" fill="#7C2D3F"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- CASE BOARD -->
+    <div id="case-board">
+      <div class="case-header">
+        <div class="case-title-card">
+          <div class="case-num" id="case-num">CASE FILE #001</div>
+          <div id="case-title">The Stolen Croissant</div>
+        </div>
+        <div class="case-progress">
+          <svg width="14" height="14" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6" fill="none" stroke="#2D5F4F" stroke-width="2.5"/><line x1="14" y1="14" x2="20" y2="20" stroke="#2D5F4F" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <span id="clue-progress">0/3</span>
+        </div>
+      </div>
+      <div class="clue-pin-area" id="clue-pins"></div>
+    </div>
+
+    <!-- MERGE BOARD -->
+    <div id="merge-wrap">
+      <div id="merge-board"></div>
+      <div id="spawners"></div>
+    </div>
+  </div>
+
+  <!-- FTUE OVERLAY -->
+  <div id="ftue" class="hidden"></div>
+
+  <!-- DEDUCE CTA (floating) -->
+  <button id="deduce-cta" class="hidden">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="6" fill="none" stroke="white" stroke-width="2.5"/><line x1="14" y1="14" x2="20" y2="20" stroke="white" stroke-width="2.5" stroke-linecap="round"/></svg>
+    <span data-i18n="deduce_btn">ACCUSE</span>
+  </button>
+
+  <!-- DEDUCTION MODAL -->
+  <div id="deduction-modal" class="modal-bg hidden">
+    <div class="modal-card">
+      <button class="modal-close" data-close="deduction">x</button>
+      <div class="modal-title" data-i18n="deduction_title">Who Did It?</div>
+      <div class="deduction-intro" id="deduction-intro"></div>
+      <div class="clue-summary" id="clue-summary"></div>
+      <div class="suspects-grid" id="suspects-grid"></div>
+      <button class="accuse-btn" id="accuse-btn" disabled data-i18n="accuse_btn">Accuse Suspect</button>
+    </div>
+  </div>
+
+  <!-- SHOP MODAL -->
+  <div id="shop-modal" class="modal-bg hidden">
+    <div class="modal-card">
+      <button class="modal-close" data-close="shop">x</button>
+      <div class="modal-title" data-i18n="shop_title">Detective's Pantry</div>
+      <div class="panel">
+        <div class="panel-h" data-i18n="shop_energy">Refill Energy</div>
+        <div id="shop-energy-rows"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h" data-i18n="shop_coins">Coin Stash</div>
+        <div id="shop-coin-rows"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MENU MODAL -->
+  <div id="menu-modal" class="modal-bg hidden">
+    <div class="modal-card">
+      <button class="modal-close" data-close="menu">x</button>
+      <div class="modal-title" data-i18n="menu_title">Detective's Desk</div>
+      <div class="panel">
+        <div class="panel-h" data-i18n="menu_stats">Bureau Stats</div>
+        <div id="menu-stats"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h" data-i18n="menu_lang">Language</div>
+        <div id="menu-lang-grid" style="display:grid; grid-template-columns: repeat(4,1fr); gap:6px;"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h" data-i18n="menu_sound">Sound</div>
+        <button class="btn-secondary" id="btn-toggle-sound" style="width:100%"></button>
+      </div>
+      <div class="panel">
+        <button class="btn-secondary" id="btn-reset" style="width:100%; background:#FFE4DC; border-color:#B22D4F; color:#B22D4F;" data-i18n="menu_reset">Reset Progress</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CASE SOLVED OVERLAY -->
+  <div id="solved-modal" class="hidden">
+    <div class="solved-bg"></div>
+    <div class="solved-stamp" id="solved-stamp">GUILTY</div>
+    <div class="solved-reward">
+      <div class="solved-reward-row" id="solved-rewards"></div>
+      <div><svg class="solved-mascot" id="solved-mascot" viewBox="0 0 200 220"></svg></div>
+      <div class="solved-next"><button class="btn-primary" id="solved-next-btn" data-i18n="next_case">Next Case</button></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <!-- FX layer -->
+  <div class="fx-layer" id="fx-layer"></div>
+
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+ * MERGE DETECTIVE v0.1
+ * Single-file TG mini app — kawaii SVG, no emoji
+ * ============================================================ */
+
+// ============ TELEGRAM ============
+const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+if (TG) { try { TG.ready(); TG.expand(); TG.setHeaderColor && TG.setHeaderColor('#FDF6E3'); TG.setBackgroundColor && TG.setBackgroundColor('#FDF6E3'); } catch(e){} }
+
+// ============ i18n ============
+const I18N = {
+  en: {
+    splash_sub: "Solve the unsolvable. One clue at a time.",
+    splash_start: "Start Investigating",
+    deduce_btn: "ACCUSE",
+    accuse_btn: "Accuse Suspect",
+    deduction_title: "Who Did It?",
+    next_case: "Next Case",
+    shop_title: "Detective's Pantry",
+    shop_energy: "Refill Energy",
+    shop_coins: "Coin Stash",
+    menu_title: "Detective's Desk",
+    menu_stats: "Bureau Stats",
+    menu_lang: "Language",
+    menu_sound: "Sound",
+    menu_reset: "Reset Progress",
+    ftue_1: "Welcome, partner. Tap the <strong>magnifying glass</strong> below to spawn your first clue.",
+    ftue_2: "Tap one item, then tap another <strong>matching item</strong> to merge them.",
+    ftue_3: "Big clues auto-pin to the board. Fill it up and we'll <strong>name a suspect.</strong>",
+    ftue_next: "Got it",
+    stat_solved: "Cases Solved",
+    stat_streak: "Streak",
+    stat_merges: "Merges Made",
+    sound_on: "Sound: ON",
+    sound_off: "Sound: OFF",
+    case_solved: "CASE CLOSED",
+    case_wrong: "Hmm... that's not quite right.",
+    no_energy: "Out of energy! Refill in the shop.",
+    not_enough_clues: "Need more clues. Keep merging!",
+    deduction_intro: "Based on your evidence, the thief is...",
+    btn_close: "Close",
+    chain_evidence: "Evidence",
+    chain_forensic: "Forensic",
+    chain_witness: "Witness",
+    item_t1_evidence: "Magnifying Glass",
+    item_t2_evidence: "Notepad",
+    item_t3_evidence: "Polaroid",
+    item_t4_evidence: "Evidence Bag",
+    item_t5_evidence: "Detective Badge",
+    item_t1_forensic: "Test Tube",
+    item_t2_forensic: "Fingerprint",
+    item_t3_forensic: "Microscope",
+    item_t4_forensic: "DNA Sample",
+    item_t5_forensic: "Crime Marker",
+    item_t1_witness: "Quill",
+    item_t2_witness: "Statement",
+    item_t3_witness: "Sketch",
+    item_t4_witness: "Recorder",
+    item_t5_witness: "Witness Star",
+    refill_5: "+5 Energy",
+    refill_15: "+15 Energy",
+    refill_full: "FULL refill",
+    pack_coins_1: "100 Coins",
+    pack_coins_2: "500 Coins",
+    pack_coins_3: "2,000 Coins",
+    coin_reward: "Coins",
+    star_reward: "Stars",
+    case_intro_1_v: "Madame Boulanger",
+    case_intro_1_l: "Sunny Bakery",
+    case_intro_1_t: "The Stolen Croissant",
+    case_intro_1_brief: "A perfectly buttery croissant. Gone. Madame is in tears.",
+    case_intro_2_v: "Granny Pearl",
+    case_intro_2_l: "Knitting Cottage",
+    case_intro_2_t: "The Missing Yarn Ball",
+    case_intro_2_brief: "Granny's prize-winning angora yarn vanished mid-purl.",
+    case_intro_3_v: "Sir Reginald Wobble",
+    case_intro_3_l: "Pickle Manor",
+    case_intro_3_t: "The Pickled Picasso",
+    case_intro_3_brief: "The priceless painting was replaced with a jar of pickles. Why.",
+    case_intro_4_v: "Captain Fishbeard",
+    case_intro_4_l: "Soggy Docks",
+    case_intro_4_t: "The Curious Crab Heist",
+    case_intro_4_brief: "Every crab in the tank — gone. Tank still wet. Curious.",
+    case_intro_5_v: "Professor Plonk",
+    case_intro_5_l: "Acorn Library",
+    case_intro_5_t: "The Whispering Bookmark",
+    case_intro_5_brief: "Books are being rearranged at night. And one whispers back.",
+  },
+  ru: {
+    splash_sub: "Раскрой нераскрываемое. Улика за уликой.",
+    splash_start: "Начать расследование",
+    deduce_btn: "ОБВИНИТЬ",
+    accuse_btn: "Обвинить подозреваемого",
+    deduction_title: "Кто это сделал?",
+    next_case: "Следующее дело",
+    shop_title: "Кладовая детектива",
+    shop_energy: "Пополнить энергию",
+    shop_coins: "Запас монет",
+    menu_title: "Стол детектива",
+    menu_stats: "Статистика",
+    menu_lang: "Язык",
+    menu_sound: "Звук",
+    menu_reset: "Сбросить прогресс",
+    ftue_1: "Привет, напарник. Нажми на <strong>лупу</strong> внизу, чтобы создать первую улику.",
+    ftue_2: "Нажми на предмет, затем на <strong>такой же</strong>, чтобы их объединить.",
+    ftue_3: "Крупные улики попадают на доску. Заполни её — и мы <strong>назовём подозреваемого.</strong>",
+    ftue_next: "Понятно",
+    stat_solved: "Дел раскрыто",
+    stat_streak: "Серия",
+    stat_merges: "Слияний",
+    sound_on: "Звук: ВКЛ",
+    sound_off: "Звук: ВЫКЛ",
+    case_solved: "ДЕЛО ЗАКРЫТО",
+    case_wrong: "Хм... что-то не сходится.",
+    no_energy: "Энергия кончилась! Пополни в магазине.",
+    not_enough_clues: "Нужно больше улик. Продолжай объединять!",
+    deduction_intro: "По вашим уликам, вор это...",
+    btn_close: "Закрыть",
+    chain_evidence: "Улики",
+    chain_forensic: "Криминалистика",
+    chain_witness: "Свидетели",
+    item_t1_evidence: "Лупа",
+    item_t2_evidence: "Блокнот",
+    item_t3_evidence: "Полароид",
+    item_t4_evidence: "Пакет улик",
+    item_t5_evidence: "Значок",
+    item_t1_forensic: "Пробирка",
+    item_t2_forensic: "Отпечаток",
+    item_t3_forensic: "Микроскоп",
+    item_t4_forensic: "Образец ДНК",
+    item_t5_forensic: "Маркер",
+    item_t1_witness: "Перо",
+    item_t2_witness: "Показания",
+    item_t3_witness: "Эскиз",
+    item_t4_witness: "Диктофон",
+    item_t5_witness: "Звезда свидетеля",
+    refill_5: "+5 энергии",
+    refill_15: "+15 энергии",
+    refill_full: "ПОЛНОЕ пополнение",
+    pack_coins_1: "100 монет",
+    pack_coins_2: "500 монет",
+    pack_coins_3: "2,000 монет",
+    coin_reward: "Монеты",
+    star_reward: "Звёзды",
+    case_intro_1_v: "Мадам Буланже",
+    case_intro_1_l: "Солнечная пекарня",
+    case_intro_1_t: "Украденный круассан",
+    case_intro_1_brief: "Идеально маслянистый круассан. Исчез. Мадам в слезах.",
+    case_intro_2_v: "Бабушка Жемчужина",
+    case_intro_2_l: "Вязальный домик",
+    case_intro_2_t: "Пропавший клубок",
+    case_intro_2_brief: "Призовая ангора бабушки исчезла прямо во время вязки.",
+    case_intro_3_v: "Сэр Реджинальд Шатун",
+    case_intro_3_l: "Поместье Огурец",
+    case_intro_3_t: "Маринованный Пикассо",
+    case_intro_3_brief: "Бесценную картину заменили банкой огурцов. Почему.",
+    case_intro_4_v: "Капитан Рыбобород",
+    case_intro_4_l: "Сырые доки",
+    case_intro_4_t: "Хитрое крабовое дело",
+    case_intro_4_brief: "Все крабы из аквариума — исчезли. Аквариум мокрый. Странно.",
+    case_intro_5_v: "Профессор Плонк",
+    case_intro_5_l: "Жёлудевая библиотека",
+    case_intro_5_t: "Шепчущая закладка",
+    case_intro_5_brief: "Книги по ночам переставляют. И одна шепчет в ответ.",
+  }
+};
+// Stub languages — fallback to EN
+const STUB_LANGS = ['es','pt','de','fr','it','tr','ar','hi','id','vi','th','uk','pl','nl','ko','ja','zh','he'];
+STUB_LANGS.forEach(l => { I18N[l] = Object.assign({}, I18N.en); });
+
+let LANG = 'en';
+function detectLang() {
+  let l = 'en';
+  try { if (TG && TG.initDataUnsafe && TG.initDataUnsafe.user && TG.initDataUnsafe.user.language_code) l = TG.initDataUnsafe.user.language_code.slice(0,2); } catch(e){}
+  if (!l) { try { l = (navigator.language || 'en').slice(0,2); } catch(e){ l = 'en'; } }
+  if (!I18N[l]) l = 'en';
+  return l;
+}
+function t(key, params) {
+  let s = (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key;
+  if (params) for (const k in params) s = s.replace('{'+k+'}', params[k]);
+  return s;
+}
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    el.innerHTML = t(key);
+  });
+}
+
+// ============ STATE ============
+const STORAGE_KEY = 'merge_detective_v1';
+const DEFAULT_STATE = {
+  coins: 50,
+  stars: 0,
+  energy: 30,
+  energyMax: 30,
+  energyLastTs: Date.now(),
+  caseIndex: 0, // which case in progression
+  cluesSubmitted: [], // [{chain, tier}] for current case
+  cluesNeeded: 3,
+  ftueStep: 0,
+  ftueDone: false,
+  board: Array(36).fill(null), // 6x6 = 36 cells; each: null or {chain, tier}
+  totalSolved: 0,
+  totalMerges: 0,
+  streak: 0,
+  soundOn: true,
+  lang: null,
+  procSeed: 1, // for procedural cases beyond case 5
+};
+let S = loadState();
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return clone(DEFAULT_STATE);
+    const parsed = JSON.parse(raw);
+    const merged = Object.assign({}, DEFAULT_STATE, parsed);
+    // Ensure board length
+    if (!Array.isArray(merged.board) || merged.board.length !== 36) merged.board = Array(36).fill(null);
+    return merged;
+  } catch (e) {
+    return clone(DEFAULT_STATE);
+  }
+}
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e){}
+}
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function resetState() {
+  S = clone(DEFAULT_STATE);
+  S.lang = LANG;
+  saveState();
+}
+
+// ============ ENERGY REGEN ============
+const ENERGY_REGEN_MS = 60 * 1000; // 1/min
+function tickEnergy() {
+  if (S.energy >= S.energyMax) { S.energyLastTs = Date.now(); return; }
+  const now = Date.now();
+  const elapsed = now - S.energyLastTs;
+  const gained = Math.floor(elapsed / ENERGY_REGEN_MS);
+  if (gained > 0) {
+    S.energy = Math.min(S.energyMax, S.energy + gained);
+    S.energyLastTs += gained * ENERGY_REGEN_MS;
+    saveState();
+  }
+}
+setInterval(() => { tickEnergy(); updateTopbar(); }, 5000);
+
+// ============ SVG ICON LIBRARY ============
+function svgWrap(inner, vb) { return '<svg viewBox="'+(vb||'0 0 80 80')+'" xmlns="http://www.w3.org/2000/svg">'+inner+'</svg>'; }
+
+// Clue items: 3 chains × 5 tiers
+const CHAINS = ['evidence','forensic','witness'];
+const TIER_MAX = 5;
+
+const SVG_CLUE = {
+  evidence: {
+    1: svgWrap('<circle cx="32" cy="32" r="18" fill="none" stroke="#E8704C" stroke-width="5"/><circle cx="32" cy="32" r="14" fill="#FFE4D6" opacity="0.6"/><circle cx="28" cy="28" r="3" fill="white" opacity="0.8"/><line x1="46" y1="46" x2="60" y2="60" stroke="#7C2D3F" stroke-width="6" stroke-linecap="round"/><circle cx="60" cy="60" r="4" fill="#7C2D3F"/>'),
+    2: svgWrap('<rect x="16" y="14" width="42" height="52" rx="4" fill="#FFE4D6" stroke="#7C2D3F" stroke-width="2.5"/><line x1="22" y1="24" x2="52" y2="24" stroke="#E8704C" stroke-width="1.5"/><line x1="22" y1="32" x2="52" y2="32" stroke="#E8704C" stroke-width="1.5"/><line x1="22" y1="40" x2="52" y2="40" stroke="#E8704C" stroke-width="1.5"/><line x1="22" y1="48" x2="42" y2="48" stroke="#E8704C" stroke-width="1.5"/><line x1="22" y1="56" x2="48" y2="56" stroke="#E8704C" stroke-width="1.5"/><circle cx="55" cy="58" r="3" fill="#D4A444"/><rect x="55" y="6" width="6" height="20" rx="3" fill="#7C2D3F" transform="rotate(20 58 16)"/>'),
+    3: svgWrap('<rect x="10" y="22" width="60" height="42" rx="6" fill="#7C2D3F" stroke="#5A1F2F" stroke-width="2"/><rect x="26" y="14" width="22" height="12" rx="2" fill="#5A1F2F"/><circle cx="40" cy="44" r="14" fill="#2A1B1F" stroke="#5A1F2F" stroke-width="1.5"/><circle cx="40" cy="44" r="10" fill="#3A6580"/><circle cx="40" cy="44" r="7" fill="#A8E0F0"/><circle cx="36" cy="40" r="3" fill="white" opacity="0.7"/><circle cx="58" cy="30" r="2.5" fill="#FFD54F"/>'),
+    4: svgWrap('<path d="M14 20 L66 20 L62 66 L18 66 Z" fill="#FFE4D6" stroke="#7C2D3F" stroke-width="2.5" stroke-linejoin="round"/><rect x="22" y="14" width="36" height="10" rx="2" fill="#FFC4A0" stroke="#7C2D3F" stroke-width="2"/><rect x="20" y="30" width="40" height="14" rx="2" fill="#7C2D3F"/><text x="40" y="41" text-anchor="middle" font-size="9" font-weight="900" fill="#FFE4D6" font-family="Arial">EVIDENCE</text><circle cx="40" cy="55" r="6" fill="#D4A444" stroke="#7C2D3F" stroke-width="1.5"/>'),
+    5: svgWrap('<defs><linearGradient id="bg5e" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE066"/><stop offset="1" stop-color="#D4A444"/></linearGradient></defs><path d="M40 8 L48 22 L64 24 L52 36 L52 56 L44 64 L40 60 L36 64 L28 56 L28 36 L16 24 L32 22 Z" fill="url(#bg5e)" stroke="#8B6418" stroke-width="2.5" stroke-linejoin="round"/><path d="M40 22 L42 30 L50 30 L44 35 L46 42 L40 38 L34 42 L36 35 L30 30 L38 30 Z" fill="#7C2D3F"/><circle cx="40" cy="32" r="2" fill="#FFE066"/>'),
+  },
+  forensic: {
+    1: svgWrap('<rect x="32" y="14" width="16" height="4" rx="1.5" fill="#7C2D3F"/><path d="M30 18 L50 18 L46 60 Q40 66 34 60 Z" fill="#A8E0F0" stroke="#2D5F4F" stroke-width="2.5" stroke-linejoin="round"/><ellipse cx="40" cy="48" rx="6" ry="4" fill="#5BC4D8" opacity="0.7"/><circle cx="36" cy="32" r="2.5" fill="white" opacity="0.8"/>'),
+    2: svgWrap('<rect x="14" y="14" width="52" height="52" rx="4" fill="#FFE4D6" stroke="#7C2D3F" stroke-width="2.5"/><path d="M40 22 Q28 26 28 40 Q28 54 40 58 Q52 54 52 40 Q52 26 40 22" fill="none" stroke="#7C2D3F" stroke-width="2"/><path d="M40 28 Q32 32 32 40 Q32 48 40 52 Q48 48 48 40 Q48 32 40 28" fill="none" stroke="#7C2D3F" stroke-width="1.8"/><path d="M40 34 Q36 36 36 40 Q36 44 40 46 Q44 44 44 40 Q44 36 40 34" fill="none" stroke="#7C2D3F" stroke-width="1.5"/>'),
+    3: svgWrap('<rect x="32" y="44" width="16" height="20" fill="#7C2D3F" stroke="#5A1F2F" stroke-width="1.5"/><rect x="20" y="60" width="40" height="8" rx="2" fill="#7C2D3F" stroke="#5A1F2F" stroke-width="1.5"/><circle cx="40" cy="22" r="10" fill="#2D5F4F" stroke="#1D4F3F" stroke-width="1.5"/><circle cx="40" cy="22" r="6" fill="#A8E0F0"/><circle cx="40" cy="22" r="3" fill="white" opacity="0.8"/><path d="M36 32 L36 44 L44 44 L44 32" fill="#7C2D3F"/><circle cx="40" cy="14" r="2" fill="#FFD54F"/>'),
+    4: svgWrap('<path d="M20 14 Q40 30 60 14 Q40 30 20 46 Q40 30 60 46 Q40 30 20 62 Q40 46 60 62" fill="none" stroke="#2D5F4F" stroke-width="4" stroke-linecap="round"/><circle cx="26" cy="18" r="4" fill="#FF6B8B"/><circle cx="54" cy="18" r="4" fill="#5BC4D8"/><circle cx="26" cy="42" r="4" fill="#FFD54F"/><circle cx="54" cy="42" r="4" fill="#A8E0F0"/><circle cx="26" cy="58" r="4" fill="#7C2D3F"/><circle cx="54" cy="58" r="4" fill="#2D5F4F"/>'),
+    5: svgWrap('<defs><linearGradient id="bg5f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE066"/><stop offset="1" stop-color="#D4A444"/></linearGradient></defs><polygon points="40,10 50,42 30,42" fill="url(#bg5f)" stroke="#8B6418" stroke-width="2.5" stroke-linejoin="round"/><rect x="36" y="40" width="8" height="22" fill="#8B6418"/><text x="40" y="32" text-anchor="middle" font-size="14" font-weight="900" fill="#7C2D3F" font-family="Arial">A</text><circle cx="40" cy="64" r="4" fill="#7C2D3F"/>'),
+  },
+  witness: {
+    1: svgWrap('<path d="M16 60 L48 28 L52 24 Q56 20 60 22 Q64 26 62 30 L58 32 L26 64 L18 66 Z" fill="#FFE4D6" stroke="#7C2D3F" stroke-width="2"/><path d="M48 28 L58 38" stroke="#7C2D3F" stroke-width="2"/><path d="M52 24 L62 30" stroke="#5A1F2F" stroke-width="1.5"/><circle cx="22" cy="62" r="3" fill="#2A1B1F"/>'),
+    2: svgWrap('<rect x="14" y="12" width="46" height="56" rx="3" fill="white" stroke="#7C2D3F" stroke-width="2.5"/><path d="M14 12 L60 12 L60 20 L14 20" fill="#7C2D3F"/><text x="37" y="18" text-anchor="middle" font-size="7" font-weight="900" fill="white">SWORN</text><line x1="20" y1="28" x2="54" y2="28" stroke="#999" stroke-width="1"/><line x1="20" y1="34" x2="54" y2="34" stroke="#999" stroke-width="1"/><line x1="20" y1="40" x2="50" y2="40" stroke="#999" stroke-width="1"/><line x1="20" y1="46" x2="54" y2="46" stroke="#999" stroke-width="1"/><line x1="20" y1="52" x2="44" y2="52" stroke="#999" stroke-width="1"/><circle cx="50" cy="60" r="6" fill="#B22D4F" stroke="#7C2D3F" stroke-width="1.5"/><path d="M48 60 L52 60 L50 64 Z" fill="#7C2D3F"/>'),
+    3: svgWrap('<rect x="12" y="14" width="50" height="56" rx="3" fill="#FFE4D6" stroke="#7C2D3F" stroke-width="2.5"/><circle cx="37" cy="36" r="10" fill="#FFC4A0" stroke="#7C2D3F" stroke-width="1.5"/><circle cx="33" cy="34" r="1.5" fill="#2A1B1F"/><circle cx="41" cy="34" r="1.5" fill="#2A1B1F"/><path d="M34 40 Q37 42 40 40" stroke="#7C2D3F" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M28 30 Q31 24 37 26 Q43 24 46 30" fill="#7C2D3F"/><rect x="28" y="48" width="18" height="16" rx="2" fill="#7C2D3F"/><rect x="56" y="58" width="14" height="4" rx="2" fill="#D4A444" transform="rotate(-30 63 60)"/>'),
+    4: svgWrap('<rect x="10" y="22" width="60" height="36" rx="6" fill="#2A1B1F" stroke="#5A1F2F" stroke-width="2"/><circle cx="24" cy="40" r="9" fill="#7C2D3F" stroke="#FFE066" stroke-width="1.5"/><circle cx="24" cy="40" r="3" fill="#FFE066"/><circle cx="56" cy="40" r="9" fill="#7C2D3F" stroke="#FFE066" stroke-width="1.5"/><circle cx="56" cy="40" r="3" fill="#FFE066"/><rect x="34" y="36" width="12" height="8" rx="1" fill="#A8E0F0"/><circle cx="40" cy="28" r="2" fill="#FF6B8B"/>'),
+    5: svgWrap('<defs><linearGradient id="bg5w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE066"/><stop offset="1" stop-color="#D4A444"/></linearGradient></defs><path d="M40 8 L48 28 L70 30 L52 42 L58 64 L40 52 L22 64 L28 42 L10 30 L32 28 Z" fill="url(#bg5w)" stroke="#8B6418" stroke-width="2.5" stroke-linejoin="round"/><circle cx="40" cy="36" r="6" fill="#7C2D3F"/><circle cx="38" cy="34" r="1.5" fill="white"/>'),
+  }
+};
+
+const CHAIN_COLOR = {
+  evidence: '#E8704C',
+  forensic: '#2D5F4F',
+  witness:  '#7C2D3F'
+};
+
+function getClueSvg(chain, tier) {
+  return SVG_CLUE[chain] && SVG_CLUE[chain][tier] ? SVG_CLUE[chain][tier] : SVG_CLUE.evidence[1];
+}
+
+// Mascot — Inspector Vix the Fox
+function mascotSvg(opts) {
+  opts = opts || {};
+  const tipClass = opts.tipping ? 'tip-hat' : '';
+  return `
+<svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg" class="${tipClass}">
+  <!-- body shadow -->
+  <ellipse cx="100" cy="210" rx="60" ry="6" fill="rgba(0,0,0,0.15)"/>
+  <!-- tail -->
+  <path d="M165 140 Q185 130 195 150 Q198 175 175 180 Q170 175 165 165" fill="#E8704C" stroke="#7C2D3F" stroke-width="2"/>
+  <path d="M180 165 Q190 158 192 168 Q190 175 178 178" fill="white"/>
+  <!-- body -->
+  <ellipse cx="100" cy="170" rx="48" ry="35" fill="#E8704C" stroke="#7C2D3F" stroke-width="2.5"/>
+  <ellipse cx="100" cy="180" rx="30" ry="18" fill="#FFE4D6"/>
+  <!-- left arm (holding magnifier) -->
+  <path d="M65 165 Q50 175 45 195" stroke="#7C2D3F" stroke-width="2.5" fill="#E8704C"/>
+  <ellipse cx="58" cy="180" rx="10" ry="14" fill="#E8704C" stroke="#7C2D3F" stroke-width="2.5"/>
+  <!-- right arm -->
+  <ellipse cx="138" cy="180" rx="10" ry="14" fill="#E8704C" stroke="#7C2D3F" stroke-width="2.5"/>
+  <!-- ears -->
+  <g class="hat-group">
+    <path d="M52 70 L70 30 L88 65 Z" fill="#E8704C" stroke="#7C2D3F" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M148 70 L130 30 L112 65 Z" fill="#E8704C" stroke="#7C2D3F" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M58 65 L70 42 L82 62 Z" fill="#FFC4A0"/>
+    <path d="M142 65 L130 42 L118 62 Z" fill="#FFC4A0"/>
+    <!-- hat -->
+    <ellipse cx="100" cy="62" rx="60" ry="14" fill="#7C2D3F" stroke="#5A1F2F" stroke-width="2"/>
+    <ellipse cx="100" cy="55" rx="48" ry="18" fill="#7C2D3F" stroke="#5A1F2F" stroke-width="2"/>
+    <!-- hat checker pattern -->
+    <rect x="68" y="45" width="8" height="8" fill="#5A1F2F"/>
+    <rect x="84" y="45" width="8" height="8" fill="#5A1F2F"/>
+    <rect x="100" y="45" width="8" height="8" fill="#5A1F2F"/>
+    <rect x="116" y="45" width="8" height="8" fill="#5A1F2F"/>
+    <rect x="76" y="53" width="8" height="8" fill="#5A1F2F"/>
+    <rect x="92" y="53" width="8" height="8" fill="#5A1F2F"/>
+    <rect x="108" y="53" width="8" height="8" fill="#5A1F2F"/>
+    <!-- hat earflaps -->
+    <ellipse cx="60" cy="58" rx="8" ry="10" fill="#5A1F2F"/>
+    <ellipse cx="140" cy="58" rx="8" ry="10" fill="#5A1F2F"/>
+    <circle cx="100" cy="38" r="6" fill="#FFE066" stroke="#8B6418" stroke-width="1.5"/>
+  </g>
+  <!-- face -->
+  <ellipse cx="100" cy="118" rx="50" ry="46" fill="#E8704C" stroke="#7C2D3F" stroke-width="2.5"/>
+  <!-- white snout area -->
+  <ellipse cx="100" cy="138" rx="36" ry="28" fill="#FFE4D6"/>
+  <!-- cheek blush -->
+  <circle cx="68" cy="135" r="8" fill="#FFA0B8" opacity="0.6"/>
+  <circle cx="132" cy="135" r="8" fill="#FFA0B8" opacity="0.6"/>
+  <!-- eyes -->
+  <ellipse cx="80" cy="110" rx="8" ry="9" fill="#2A1B1F"/>
+  <ellipse cx="120" cy="110" rx="8" ry="9" fill="#2A1B1F"/>
+  <circle cx="82" cy="107" r="3" fill="white"/>
+  <circle cx="122" cy="107" r="3" fill="white"/>
+  <circle cx="78" cy="113" r="1.5" fill="white" opacity="0.7"/>
+  <circle cx="118" cy="113" r="1.5" fill="white" opacity="0.7"/>
+  <!-- nose -->
+  <ellipse cx="100" cy="128" rx="6" ry="5" fill="#2A1B1F"/>
+  <ellipse cx="98" cy="126" rx="2" ry="1.5" fill="white" opacity="0.5"/>
+  <!-- mouth -->
+  <path d="M100 134 Q100 140 95 142" stroke="#2A1B1F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M100 134 Q100 140 105 142" stroke="#2A1B1F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M88 144 Q95 150 100 148" stroke="#2A1B1F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M112 144 Q105 150 100 148" stroke="#2A1B1F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- magnifying glass in paw -->
+  <circle cx="48" cy="195" r="14" fill="none" stroke="#D4A444" stroke-width="4"/>
+  <circle cx="48" cy="195" r="10" fill="#A8E0F0" opacity="0.6"/>
+  <circle cx="44" cy="191" r="3" fill="white" opacity="0.8"/>
+  <line x1="58" y1="205" x2="68" y2="215" stroke="#D4A444" stroke-width="5" stroke-linecap="round"/>
+</svg>`;
+}
+
+// Suspect portrait generator
+function rng(seed) {
+  let s = seed >>> 0;
+  return function() { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+function pick(rand, arr) { return arr[Math.floor(rand() * arr.length)]; }
+
+const SUSPECT_PARTS = {
+  skin: ['#FFE0C4','#FFCBA4','#E0A87C','#C28452','#8B5A3A'],
+  hair: ['#2A1B1F','#7C2D3F','#D4A444','#E8704C','#FFE066','#A8E0F0','#9D7BB0','#5A8B7A','#FFFFFF'],
+  outfit: ['#7C2D3F','#2D5F4F','#3A6580','#8B6418','#B22D4F','#5A8B7A','#9D7BB0','#2A1B1F'],
+};
+
+function suspectSvg(seed) {
+  const r = rng(seed);
+  const skin = pick(r, SUSPECT_PARTS.skin);
+  const hair = pick(r, SUSPECT_PARTS.hair);
+  const outfit = pick(r, SUSPECT_PARTS.outfit);
+  const faceShape = Math.floor(r() * 3); // 0:round 1:oval 2:square
+  const hairStyle = Math.floor(r() * 6);
+  const eyeStyle = Math.floor(r() * 4);
+  const mouthStyle = Math.floor(r() * 4);
+  const accessoryId = Math.floor(r() * 8); // glasses, monocle, mustache, scar, eyepatch, bowtie, beard, none
+  const hatId = Math.floor(r() * 5); // topHat, fedora, beret, capCheck, none
+
+  let faceRX = 38, faceRY = 42;
+  if (faceShape === 0) { faceRX = 40; faceRY = 38; }
+  else if (faceShape === 2) { faceRX = 36; faceRY = 38; }
+  let face;
+  if (faceShape === 2) {
+    face = `<rect x="${100-faceRX}" y="${100-faceRY}" width="${faceRX*2}" height="${faceRY*2}" rx="14" fill="${skin}" stroke="#2A1B1F" stroke-width="2"/>`;
+  } else {
+    face = `<ellipse cx="100" cy="100" rx="${faceRX}" ry="${faceRY}" fill="${skin}" stroke="#2A1B1F" stroke-width="2"/>`;
+  }
+
+  // Hair styles
+  let hairSvg = '';
+  switch (hairStyle) {
+    case 0: hairSvg = `<path d="M62 88 Q60 50 100 50 Q140 50 138 88 Q130 70 100 70 Q70 70 62 88" fill="${hair}" stroke="#2A1B1F" stroke-width="2"/>`; break; // short
+    case 1: hairSvg = `<path d="M58 100 Q56 50 100 48 Q144 50 142 100 Q140 80 130 76 L130 130 L70 130 L70 76 Q60 80 58 100" fill="${hair}" stroke="#2A1B1F" stroke-width="2"/>`; break; // long
+    case 2: hairSvg = `<ellipse cx="100" cy="48" rx="28" ry="20" fill="${hair}" stroke="#2A1B1F" stroke-width="2"/><circle cx="100" cy="40" r="14" fill="${hair}" stroke="#2A1B1F" stroke-width="2"/>`; break; // bun
+    case 3: hairSvg = `<path d="M62 90 Q60 56 100 56 Q140 56 138 90" fill="${hair}" stroke="#2A1B1F" stroke-width="2"/><path d="M85 56 Q90 40 100 42 Q110 40 115 56" fill="${hair}" stroke="#2A1B1F" stroke-width="2"/>`; break; // mohawk-ish
+    case 4: hairSvg = ``; break; // bald
+    case 5: hairSvg = `<path d="M60 100 Q56 60 100 56 Q120 56 134 78 Q140 86 138 100 Q134 90 122 86 L80 86 Q68 90 60 100" fill="${hair}" stroke="#2A1B1F" stroke-width="2"/><circle cx="74" cy="80" r="6" fill="${hair}"/><circle cx="126" cy="80" r="6" fill="${hair}"/>`; break; // curly
+  }
+
+  // Eyes
+  let eyes = '';
+  switch (eyeStyle) {
+    case 0: eyes = `<circle cx="84" cy="100" r="4" fill="#2A1B1F"/><circle cx="116" cy="100" r="4" fill="#2A1B1F"/><circle cx="85" cy="98" r="1.5" fill="white"/><circle cx="117" cy="98" r="1.5" fill="white"/>`; break; // round
+    case 1: eyes = `<path d="M78 100 Q84 96 90 100" stroke="#2A1B1F" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M110 100 Q116 96 122 100" stroke="#2A1B1F" stroke-width="2.5" fill="none" stroke-linecap="round"/>`; break; // sleepy
+    case 2: eyes = `<ellipse cx="84" cy="100" rx="5" ry="6" fill="#2A1B1F"/><ellipse cx="116" cy="100" rx="5" ry="6" fill="#2A1B1F"/><circle cx="85" cy="97" r="2" fill="white"/><circle cx="117" cy="97" r="2" fill="white"/><circle cx="83" cy="102" r="1" fill="white" opacity="0.7"/><circle cx="115" cy="102" r="1" fill="white" opacity="0.7"/>`; break; // sparkly
+    case 3: eyes = `<line x1="78" y1="100" x2="90" y2="100" stroke="#2A1B1F" stroke-width="3" stroke-linecap="round"/><line x1="110" y1="100" x2="122" y2="100" stroke="#2A1B1F" stroke-width="3" stroke-linecap="round"/>`; break; // shut
+  }
+
+  // Mouths
+  let mouth = '';
+  switch (mouthStyle) {
+    case 0: mouth = `<path d="M92 124 Q100 130 108 124" stroke="#7C2D3F" stroke-width="2.5" fill="none" stroke-linecap="round"/>`; break; // smile
+    case 1: mouth = `<path d="M92 128 Q100 122 108 128" stroke="#7C2D3F" stroke-width="2.5" fill="none" stroke-linecap="round"/>`; break; // frown
+    case 2: mouth = `<line x1="92" y1="125" x2="108" y2="125" stroke="#7C2D3F" stroke-width="2.5" stroke-linecap="round"/>`; break; // neutral
+    case 3: mouth = `<ellipse cx="100" cy="126" rx="5" ry="4" fill="#7C2D3F"/>`; break; // open
+  }
+
+  // Cheeks
+  const cheeks = `<circle cx="74" cy="118" r="5" fill="#FFA0B8" opacity="0.4"/><circle cx="126" cy="118" r="5" fill="#FFA0B8" opacity="0.4"/>`;
+
+  // Nose
+  const nose = `<path d="M100 108 L97 118 L103 118 Z" fill="rgba(0,0,0,0.1)" stroke="#7C2D3F" stroke-width="0.8"/>`;
+
+  // Accessory
+  let accessory = '';
+  switch (accessoryId) {
+    case 0: accessory = `<circle cx="84" cy="100" r="9" fill="none" stroke="#2A1B1F" stroke-width="2"/><circle cx="116" cy="100" r="9" fill="none" stroke="#2A1B1F" stroke-width="2"/><line x1="93" y1="100" x2="107" y2="100" stroke="#2A1B1F" stroke-width="2"/>`; break; // glasses
+    case 1: accessory = `<circle cx="116" cy="100" r="10" fill="none" stroke="#D4A444" stroke-width="2"/><line x1="116" y1="110" x2="120" y2="125" stroke="#D4A444" stroke-width="2"/>`; break; // monocle
+    case 2: accessory = `<path d="M82 122 Q90 128 100 124 Q110 128 118 122 Q115 130 100 130 Q85 130 82 122" fill="#2A1B1F"/>`; break; // mustache
+    case 3: accessory = `<path d="M125 95 L130 110" stroke="#B22D4F" stroke-width="2" stroke-linecap="round"/><path d="M127 99 L129 101 M126 103 L128 105" stroke="#B22D4F" stroke-width="1.2"/>`; break; // scar
+    case 4: accessory = `<circle cx="84" cy="100" r="11" fill="#2A1B1F"/><line x1="73" y1="92" x2="68" y2="80" stroke="#2A1B1F" stroke-width="2"/><line x1="95" y1="92" x2="135" y2="85" stroke="#2A1B1F" stroke-width="2"/>`; break; // eyepatch
+    case 5: accessory = `<path d="M86 138 L94 134 L100 136 L106 134 L114 138 L108 144 L100 142 L92 144 Z" fill="#B22D4F" stroke="#2A1B1F" stroke-width="1.5"/><circle cx="100" cy="139" r="2" fill="#7C2D3F"/>`; break; // bowtie
+    case 6: accessory = `<path d="M70 122 Q72 140 100 145 Q128 140 130 122 Q124 130 100 132 Q76 130 70 122" fill="${hair}" stroke="#2A1B1F" stroke-width="1.5"/>`; break; // beard
+    case 7: accessory = ``; break;
+  }
+
+  // Hat
+  let hat = '';
+  switch (hatId) {
+    case 0: hat = `<rect x="78" y="32" width="44" height="22" rx="2" fill="#2A1B1F"/><ellipse cx="100" cy="56" rx="36" ry="6" fill="#2A1B1F"/><rect x="78" y="48" width="44" height="4" fill="#B22D4F"/>`; break; // top hat
+    case 1: hat = `<ellipse cx="100" cy="56" rx="40" ry="8" fill="#5A1F2F"/><path d="M76 56 Q80 36 100 36 Q120 36 124 56" fill="#7C2D3F"/><rect x="76" y="50" width="48" height="4" fill="#2A1B1F"/>`; break; // fedora
+    case 2: hat = `<ellipse cx="100" cy="50" rx="38" ry="14" fill="#B22D4F"/><circle cx="100" cy="40" r="4" fill="#7C2D3F"/>`; break; // beret
+    case 3: hat = `<ellipse cx="100" cy="50" rx="40" ry="14" fill="#2D5F4F"/><rect x="70" y="48" width="60" height="6" fill="#1D4F3F"/><rect x="76" y="38" width="6" height="6" fill="#1D4F3F"/><rect x="88" y="38" width="6" height="6" fill="#1D4F3F"/><rect x="100" y="38" width="6" height="6" fill="#1D4F3F"/><rect x="112" y="38" width="6" height="6" fill="#1D4F3F"/>`; break; // detective cap (rare)
+    case 4: hat = ``; break;
+  }
+
+  // Body / shoulders
+  const body = `<path d="M52 200 Q70 160 100 162 Q130 160 148 200 L52 200" fill="${outfit}" stroke="#2A1B1F" stroke-width="2"/><circle cx="80" cy="180" r="3" fill="#FFE066" stroke="#2A1B1F" stroke-width="0.8"/><circle cx="120" cy="180" r="3" fill="#FFE066" stroke="#2A1B1F" stroke-width="0.8"/>`;
+
+  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    ${body}
+    ${face}
+    ${hairSvg}
+    ${cheeks}
+    ${eyes}
+    ${nose}
+    ${mouth}
+    ${accessory}
+    ${hat}
+  </svg>`;
+}
+
+// ============ SOUND ============
+let audioCtx = null;
+function getCtx() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ audioCtx = null; } } return audioCtx; }
+function tone(freq, dur, type, vol) {
+  if (!S.soundOn) return;
+  const ctx = getCtx(); if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume();
+  const o = ctx.createOscillator(); const g = ctx.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  g.gain.value = vol || 0.15;
+  g.gain.setValueAtTime(g.gain.value, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + dur);
+}
+function sfxMerge(tier) {
+  const base = 440 + tier * 80;
+  tone(base, 0.12, 'sine', 0.18);
+  setTimeout(() => tone(base * 1.5, 0.18, 'triangle', 0.14), 60);
+}
+function sfxSpawn() { tone(660, 0.08, 'square', 0.06); }
+function sfxClick() { tone(800, 0.04, 'sine', 0.08); }
+function sfxPin() { tone(880, 0.1, 'triangle', 0.12); setTimeout(()=>tone(1320,0.1,'sine',0.08),60); }
+function sfxSolved() {
+  const notes = [523,659,784,1047];
+  notes.forEach((n,i) => setTimeout(()=>tone(n,0.18,'sine',0.22), i*100));
+  setTimeout(()=>{ tone(1568,0.4,'triangle',0.2); }, 500);
+}
+function sfxWrong() { tone(220, 0.3, 'sawtooth', 0.12); }
+function sfxCoin() { tone(1320, 0.08, 'sine', 0.1); }
+function sfxButton() { tone(500, 0.05, 'sine', 0.08); }
+
+// ============ GAME DATA ============
+
+// Cases — hand-crafted intro (1-5), procedural afterward
+const HAND_CASES = [
+  {
+    title: 'case_intro_1_t', victim: 'case_intro_1_v', location: 'case_intro_1_l', brief: 'case_intro_1_brief',
+    suspectSeeds: [101,102,103],
+    suspectNames: ['Chef Bouchard','Postman Pip','Tourist Tilly'],
+    suspectTags: ['Kitchen','Mailman','Visitor'],
+    culprit: 0,
+    clueHints: [
+      "Flour on the floor near the back door.",
+      "A spatula was left at the scene.",
+      "Witness saw a tall white hat fleeing."
+    ],
+    cluesNeeded: 3,
+  },
+  {
+    title: 'case_intro_2_t', victim: 'case_intro_2_v', location: 'case_intro_2_l', brief: 'case_intro_2_brief',
+    suspectSeeds: [201,202,203],
+    suspectNames: ['Whiskers the Kitten','Vacuum Vince','Magpie Mira'],
+    suspectTags: ['Tenant','Salesman','Visitor'],
+    culprit: 0,
+    clueHints: [
+      "Cat hair clings to the unraveled yarn.",
+      "Tiny paw prints in the dust.",
+      "A meow was heard at the moment of the crime."
+    ],
+    cluesNeeded: 3,
+  },
+  {
+    title: 'case_intro_3_t', victim: 'case_intro_3_v', location: 'case_intro_3_l', brief: 'case_intro_3_brief',
+    suspectSeeds: [301,302,303],
+    suspectNames: ['Chef Pickleton','Art Critic Vex','Cousin Cuthbert'],
+    suspectTags: ['Cook','Critic','Family'],
+    culprit: 1,
+    clueHints: [
+      "Hatred for the painting was recently published.",
+      "A signature card was left atop the pickles.",
+      "Brine on the manor's front step matches the critic's brand."
+    ],
+    cluesNeeded: 3,
+  },
+  {
+    title: 'case_intro_4_t', victim: 'case_intro_4_v', location: 'case_intro_4_l', brief: 'case_intro_4_brief',
+    suspectSeeds: [401,402,403],
+    suspectNames: ['Seagull Sam','First Mate Bryn','Octavia the Octopus'],
+    suspectTags: ['Bird','Crew','Tenant'],
+    culprit: 2,
+    clueHints: [
+      "Suction-cup prints around the tank rim.",
+      "A trail of saltwater leads back to a hidden cove.",
+      "Crab shells found neatly stacked underwater."
+    ],
+    cluesNeeded: 4,
+  },
+  {
+    title: 'case_intro_5_t', victim: 'case_intro_5_v', location: 'case_intro_5_l', brief: 'case_intro_5_brief',
+    suspectSeeds: [501,502,503],
+    suspectNames: ['Librarian Liesl','Ghost of Edgar','Bookworm Bram'],
+    suspectTags: ['Staff','Spectre','Reader'],
+    culprit: 1,
+    clueHints: [
+      "Books are colder than the surrounding air.",
+      "Faint whispers occur only when the moon is full.",
+      "A name inscribed in the margins: 'E.'"
+    ],
+    cluesNeeded: 4,
+  },
+];
+
+const PROC_NAMES_FIRST = ['Pip','Tilly','Bram','Cuthbert','Mira','Vince','Liesl','Bryn','Mort','Hazel','Otto','Dot','Wren','Finn','Plum','Sage','Gus','Nell','Boo','Twig','Pim','Lula','Tomi','Bilo','Pickle'];
+const PROC_NAMES_LAST  = ['Bumble','Wobble','Pickleton','Tinkers','Crumbs','Pip','Wickers','Yolk','Plonk','Smudge','Twigsbury','Boop','Bunbun','Knock','Tartleton','Pluck','Snickerdoodle','Wiggles','Spoonsby','Mews','Vexley','Trample','Drizzle'];
+const PROC_TAGS = ['Baker','Mailman','Visitor','Florist','Mechanic','Banker','Painter','Plumber','Mayor','Teacher','Cook','Sailor','Knitter','Spy','Tailor','Wizard'];
+const PROC_TITLES_PATTERN = [
+  ['The Stolen','Croissant'],['The Missing','Ribbon'],['The Vanishing','Jam'],
+  ['The Pilfered','Pocketwatch'],['The Borrowed','Bonnet'],['The Lifted','Lamp'],
+  ['The Suspicious','Sausage'],['The Bewildered','Bee'],['The Curious','Chowder'],
+  ['The Embezzled','Eclair'],['The Filched','Fishbowl'],['The Grabbed','Goose'],
+  ['The Hijacked','Handkerchief'],['The Jeopardized','Jelly'],['The Kidnapped','Kazoo'],
+  ['The Loafed','Loaf'],['The Misplaced','Monocle'],['The Nicked','Noodle'],
+];
+const PROC_LOCATIONS = ['Cozy Cafe','Old Lighthouse','Mossy Bridge','Tinker Workshop','Honey Meadow','Foggy Pier','Marble Plaza','Tea Garden','Crooked Inn','Star Observatory','Pickle Cellar','Cloud Bakery','Velvet Theatre'];
+const PROC_CLUE_HINTS = [
+  "Footprints lead to {suspect}.",
+  "{suspect} smelled strongly of butter.",
+  "A monogrammed handkerchief was found — 'P.B.'",
+  "{suspect} was seen pacing nervously.",
+  "Receipt for rope, dated yesterday.",
+  "A loose button matches {suspect}'s coat.",
+  "Recently, {suspect} was overheard muttering threats.",
+  "Mud on the carpet, same hue as the alleyway.",
+  "{suspect} has a secret door behind the wardrobe.",
+  "A torn map, half of it pinned to {suspect}'s wall.",
+  "Birds were seen circling {suspect}'s hat.",
+  "{suspect} hasn't slept in three days."
+];
+
+function genProceduralCase(idx) {
+  const seed = 1000 + idx * 31;
+  const r = rng(seed);
+  const title = pick(r, PROC_TITLES_PATTERN);
+  const location = pick(r, PROC_LOCATIONS);
+  const victim = pick(r, PROC_NAMES_FIRST) + ' ' + pick(r, PROC_NAMES_LAST);
+  const suspectCount = 3;
+  const suspects = [];
+  const used = new Set();
+  for (let i = 0; i < suspectCount; i++) {
+    let nm;
+    do { nm = pick(r, PROC_NAMES_FIRST) + ' ' + pick(r, PROC_NAMES_LAST); } while (used.has(nm));
+    used.add(nm);
+    suspects.push({ name: nm, seed: seed + i * 7 + Math.floor(r()*5000), tag: pick(r, PROC_TAGS) });
+  }
+  const culprit = Math.floor(r() * suspectCount);
+  const clueHints = [];
+  const hintSet = new Set();
+  while (clueHints.length < 3) {
+    const h = pick(r, PROC_CLUE_HINTS).replace('{suspect}', suspects[culprit].name.split(' ')[0]);
+    if (!hintSet.has(h)) { hintSet.add(h); clueHints.push(h); }
+  }
+  return {
+    _proc: true,
+    title: title[0] + ' ' + title[1],
+    victim, location,
+    brief: `${victim} reports: '${title[1].toLowerCase()} ... gone!'`,
+    suspectSeeds: suspects.map(s => s.seed),
+    suspectNames: suspects.map(s => s.name),
+    suspectTags: suspects.map(s => s.tag),
+    culprit,
+    clueHints,
+    cluesNeeded: 3 + Math.floor(idx / 5),
+  };
+}
+
+function getCurrentCase() {
+  if (S.caseIndex < HAND_CASES.length) return HAND_CASES[S.caseIndex];
+  return genProceduralCase(S.caseIndex - HAND_CASES.length);
+}
+
+// ============ MERGE BOARD ENGINE ============
+const BOARD_W = 6, BOARD_H = 6;
+let pickedIdx = null;
+
+function buildBoard() {
+  const grid = document.getElementById('merge-board');
+  grid.innerHTML = '';
+  for (let i = 0; i < BOARD_W * BOARD_H; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'grid-cell';
+    cell.dataset.idx = i;
+    cell.addEventListener('click', onCellClick);
+    grid.appendChild(cell);
+  }
+  renderBoardItems();
+  buildSpawners();
+}
+
+function renderBoardItems() {
+  const cells = document.querySelectorAll('#merge-board .grid-cell');
+  cells.forEach((c, i) => {
+    c.innerHTML = '';
+    c.classList.remove('selected');
+    const item = S.board[i];
+    if (item) {
+      const el = makeItemEl(item);
+      c.appendChild(el);
+    }
+  });
+}
+
+function makeItemEl(item, freshlySpawned) {
+  const div = document.createElement('div');
+  div.className = 'merge-item t' + item.tier + (freshlySpawned ? ' spawn-in' : '');
+  if (item.tier >= 4) div.classList.add('submittable');
+  div.innerHTML = getClueSvg(item.chain, item.tier);
+  if (item.tier >= 2) {
+    const badge = document.createElement('div');
+    badge.className = 'tier-badge';
+    badge.style.background = CHAIN_COLOR[item.chain];
+    badge.textContent = item.tier;
+    div.appendChild(badge);
+  }
+  return div;
+}
+
+function buildSpawners() {
+  const c = document.getElementById('spawners');
+  c.innerHTML = '';
+  CHAINS.forEach(chain => {
+    const btn = document.createElement('button');
+    btn.className = 'spawner';
+    btn.dataset.chain = chain;
+    btn.innerHTML = getClueSvg(chain, 1);
+    const cost = document.createElement('div');
+    cost.className = 'spawner-cost';
+    cost.innerHTML = `<svg viewBox="0 0 24 24" width="10" height="10" style="vertical-align:middle"><path d="M13 2 L4 14 L11 14 L9 22 L19 9 L12 9 Z" fill="#FFD54F"/></svg>1`;
+    btn.appendChild(cost);
+    btn.addEventListener('click', () => onSpawnerClick(chain));
+    c.appendChild(btn);
+  });
+}
+
+function findEmptyCell() {
+  const empties = [];
+  for (let i = 0; i < S.board.length; i++) if (!S.board[i]) empties.push(i);
+  if (!empties.length) return -1;
+  return empties[Math.floor(Math.random() * empties.length)];
+}
+
+function onSpawnerClick(chain) {
+  if (S.energy < 1) { showToast(t('no_energy')); sfxWrong(); return; }
+  const idx = findEmptyCell();
+  if (idx < 0) { showToast('Board is full!'); sfxWrong(); return; }
+  S.energy--;
+  S.board[idx] = { chain, tier: 1 };
+  const cell = document.querySelector('#merge-board .grid-cell[data-idx="'+idx+'"]');
+  cell.innerHTML = '';
+  cell.appendChild(makeItemEl(S.board[idx], true));
+  sfxSpawn();
+  saveState();
+  updateTopbar();
+  advanceFtue(1);
+}
+
+function onCellClick(e) {
+  const cell = e.currentTarget;
+  const idx = parseInt(cell.dataset.idx, 10);
+  const item = S.board[idx];
+
+  if (pickedIdx === null) {
+    if (!item) return;
+    pickedIdx = idx;
+    cell.classList.add('selected');
+    const inner = cell.querySelector('.merge-item');
+    if (inner) inner.classList.add('picked');
+    sfxClick();
+    return;
+  }
+
+  if (pickedIdx === idx) {
+    // deselect
+    cell.classList.remove('selected');
+    const inner = cell.querySelector('.merge-item');
+    if (inner) inner.classList.remove('picked');
+    pickedIdx = null;
+    sfxClick();
+    return;
+  }
+
+  const fromItem = S.board[pickedIdx];
+  const toItem = item;
+  const fromCell = document.querySelector('#merge-board .grid-cell[data-idx="'+pickedIdx+'"]');
+
+  if (!toItem) {
+    // move
+    S.board[idx] = fromItem;
+    S.board[pickedIdx] = null;
+    fromCell.classList.remove('selected');
+    pickedIdx = null;
+    renderBoardItems();
+    sfxClick();
+    saveState();
+    return;
+  }
+
+  // try merge
+  if (fromItem.chain === toItem.chain && fromItem.tier === toItem.tier && fromItem.tier < TIER_MAX) {
+    const newTier = fromItem.tier + 1;
+    S.totalMerges++;
+    sfxMerge(newTier);
+    // animate out source items
+    fromCell.querySelector('.merge-item') && fromCell.querySelector('.merge-item').classList.add('merging');
+    cell.querySelector('.merge-item') && cell.querySelector('.merge-item').classList.add('merging');
+    spawnMergeSparks(cell);
+    setTimeout(() => {
+      S.board[pickedIdx] = null;
+      S.board[idx] = { chain: fromItem.chain, tier: newTier };
+      fromCell.classList.remove('selected');
+      pickedIdx = null;
+      renderBoardItems();
+      const newCell = document.querySelector('#merge-board .grid-cell[data-idx="'+idx+'"]');
+      const newEl = newCell.querySelector('.merge-item');
+      if (newEl) newEl.classList.add('merged-in');
+      saveState();
+      // auto-pin if T4+ and there's space
+      if (newTier >= 4) {
+        const curCase = getCurrentCase();
+        if (S.cluesSubmitted.length < curCase.cluesNeeded) {
+          autoSubmitClue(idx);
+        }
+      }
+      advanceFtue(2);
+    }, 250);
+    return;
+  }
+
+  // swap
+  S.board[pickedIdx] = toItem;
+  S.board[idx] = fromItem;
+  fromCell.classList.remove('selected');
+  pickedIdx = null;
+  renderBoardItems();
+  sfxClick();
+  saveState();
+}
+
+function spawnMergeSparks(cell) {
+  const rect = cell.getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+  for (let i = 0; i < 10; i++) {
+    const s = document.createElement('div');
+    s.className = 'merge-spark';
+    const a = Math.random() * Math.PI * 2;
+    const r = 30 + Math.random() * 25;
+    s.style.setProperty('--sx', Math.cos(a)*r+'px');
+    s.style.setProperty('--sy', Math.sin(a)*r+'px');
+    s.style.left = cx + 'px'; s.style.top = cy + 'px';
+    document.getElementById('fx-layer').appendChild(s);
+    setTimeout(()=>s.remove(), 700);
+  }
+}
+
+function autoSubmitClue(boardIdx) {
+  const item = S.board[boardIdx];
+  if (!item) return;
+  const curCase = getCurrentCase();
+  if (S.cluesSubmitted.length >= curCase.cluesNeeded) return;
+  // Remove from board, add to clue pins
+  S.board[boardIdx] = null;
+  S.cluesSubmitted.push({ chain: item.chain, tier: item.tier });
+  renderBoardItems();
+  renderClueBoard();
+  sfxPin();
+  saveState();
+  flyToBoard(boardIdx);
+  if (S.cluesSubmitted.length >= curCase.cluesNeeded) {
+    showDeduceCta();
+    advanceFtue(3);
+  }
+}
+
+function flyToBoard(boardIdx) {
+  const cell = document.querySelector('#merge-board .grid-cell[data-idx="'+boardIdx+'"]');
+  const board = document.getElementById('case-board');
+  if (!cell || !board) return;
+  const cellRect = cell.getBoundingClientRect();
+  const boardRect = board.getBoundingClientRect();
+  const fly = document.createElement('div');
+  fly.style.cssText = `position:fixed; left:${cellRect.left}px; top:${cellRect.top}px; width:${cellRect.width}px; height:${cellRect.height}px; pointer-events:none; z-index:200; transition:transform 0.6s cubic-bezier(0.5,1,0.5,1), opacity 0.4s 0.4s; will-change:transform;`;
+  fly.innerHTML = `<div class="merge-item t5" style="width:100%;height:100%">${getClueSvg('evidence',5)}</div>`;
+  document.body.appendChild(fly);
+  const dx = boardRect.left + 30 - cellRect.left;
+  const dy = boardRect.top + 30 - cellRect.top;
+  requestAnimationFrame(()=>{
+    fly.style.transform = `translate(${dx}px, ${dy}px) scale(0.5) rotate(360deg)`;
+    fly.style.opacity = '0';
+  });
+  setTimeout(()=>fly.remove(), 1100);
+}
+
+// ============ CASE BOARD RENDER ============
+function renderCase() {
+  const c = getCurrentCase();
+  document.getElementById('case-num').textContent = 'CASE FILE #' + String(S.caseIndex + 1).padStart(3,'0');
+  document.getElementById('case-title').textContent = c._proc ? c.title : t(c.title);
+  renderClueBoard();
+}
+
+function renderClueBoard() {
+  const c = getCurrentCase();
+  const need = c.cluesNeeded;
+  const pinArea = document.getElementById('clue-pins');
+  pinArea.innerHTML = '';
+  for (let i = 0; i < need; i++) {
+    const submitted = S.cluesSubmitted[i];
+    if (submitted) {
+      const p = document.createElement('div');
+      p.className = 'clue-pin';
+      p.innerHTML = getClueSvg(submitted.chain, submitted.tier);
+      pinArea.appendChild(p);
+    } else {
+      const p = document.createElement('div');
+      p.className = 'clue-pin-empty';
+      pinArea.appendChild(p);
+    }
+  }
+  document.getElementById('clue-progress').textContent = `${S.cluesSubmitted.length}/${need}`;
+}
+
+function showDeduceCta() {
+  document.getElementById('deduce-cta').classList.remove('hidden');
+}
+function hideDeduceCta() {
+  document.getElementById('deduce-cta').classList.add('hidden');
+}
+
+// ============ DEDUCTION ============
+let deduceChoice = null;
+function openDeduction() {
+  if (S.cluesSubmitted.length < getCurrentCase().cluesNeeded) {
+    showToast(t('not_enough_clues')); return;
+  }
+  deduceChoice = null;
+  const c = getCurrentCase();
+  const intro = document.getElementById('deduction-intro');
+  intro.innerHTML = `<strong>${c._proc ? c.victim : t(c.victim)}</strong> @ <em>${c._proc ? c.location : t(c.location)}</em><br><span style="opacity:0.8">${c._proc ? c.brief : t(c.brief)}</span>`;
+
+  const summary = document.getElementById('clue-summary');
+  summary.innerHTML = '';
+  c.clueHints.slice(0, S.cluesSubmitted.length).forEach((hint, i) => {
+    const row = document.createElement('div');
+    row.className = 'clue-summary-item';
+    const cl = S.cluesSubmitted[i] || { chain:'evidence', tier:5 };
+    row.innerHTML = `${getClueSvg(cl.chain, cl.tier)}<span>${hint}</span>`;
+    summary.appendChild(row);
+  });
+
+  const grid = document.getElementById('suspects-grid');
+  grid.innerHTML = '';
+  c.suspectSeeds.forEach((seed, i) => {
+    const card = document.createElement('div');
+    card.className = 'suspect-card';
+    card.innerHTML = `
+      <div class="suspect-portrait">${suspectSvg(seed)}</div>
+      <div class="suspect-name">${c.suspectNames[i]}</div>
+      <div class="suspect-tag">${c.suspectTags[i]}</div>
+    `;
+    card.addEventListener('click', () => {
+      grid.querySelectorAll('.suspect-card').forEach(x => x.classList.remove('accuse'));
+      card.classList.add('accuse');
+      deduceChoice = i;
+      document.getElementById('accuse-btn').disabled = false;
+      sfxClick();
+    });
+    grid.appendChild(card);
+  });
+  document.getElementById('accuse-btn').disabled = true;
+  document.getElementById('deduction-modal').classList.remove('hidden');
+}
+function closeDeduction() { document.getElementById('deduction-modal').classList.add('hidden'); }
+
+function doAccuse() {
+  if (deduceChoice === null) return;
+  const c = getCurrentCase();
+  if (deduceChoice === c.culprit) {
+    // CORRECT
+    closeDeduction();
+    showCaseSolved();
+  } else {
+    // WRONG
+    sfxWrong();
+    const cards = document.querySelectorAll('.suspect-card');
+    cards.forEach(x => x.classList.add('wrong-shake'));
+    setTimeout(()=> cards.forEach(x => x.classList.remove('wrong-shake')), 600);
+    showToast(t('case_wrong'));
+    // small mercy: keep modal open, let them try again
+    cards[deduceChoice] && cards[deduceChoice].classList.remove('accuse');
+    deduceChoice = null;
+    document.getElementById('accuse-btn').disabled = true;
+  }
+}
+
+// ============ CASE SOLVED ============
+function showCaseSolved() {
+  const coinReward = 50 + S.caseIndex * 15;
+  const starReward = (S.caseIndex + 1) % 3 === 0 ? 1 : 0;
+  S.coins += coinReward;
+  S.stars += starReward;
+  S.totalSolved++;
+  S.streak++;
+
+  const m = document.getElementById('solved-modal');
+  m.classList.remove('hidden');
+  m.classList.add('show');
+  const stamp = document.getElementById('solved-stamp');
+  stamp.textContent = t('case_solved');
+  const rewardsEl = document.getElementById('solved-rewards');
+  rewardsEl.innerHTML = `
+    <div class="reward-item">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#D4A444" stroke="#8B6418" stroke-width="1.5"/><circle cx="12" cy="12" r="6.5" fill="#FFE066" stroke="#8B6418" stroke-width="1"/><text x="12" y="16" text-anchor="middle" font-size="9" font-weight="900" fill="#8B6418">$</text></svg>
+      +${coinReward}
+    </div>
+    ${starReward ? `<div class="reward-item">
+      <svg viewBox="0 0 24 24"><path d="M12 2 L14.5 9 L22 9.5 L16 14.5 L18 22 L12 17.8 L6 22 L8 14.5 L2 9.5 L9.5 9 Z" fill="#FFD54F" stroke="#8B6418" stroke-width="1.5"/></svg>
+      +${starReward}
+    </div>` : ''}
+  `;
+  document.getElementById('solved-mascot').outerHTML = mascotSvg({tipping:true}).replace('<svg ', '<svg id="solved-mascot" class="solved-mascot" ');
+
+  sfxSolved();
+  burstConfetti();
+  setTimeout(()=> coinRain(coinReward), 400);
+  saveState();
+}
+
+function nextCase() {
+  S.caseIndex++;
+  S.cluesSubmitted = [];
+  hideDeduceCta();
+  const m = document.getElementById('solved-modal');
+  m.classList.remove('show');
+  m.classList.add('hidden');
+  renderCase();
+  updateTopbar();
+  saveState();
+}
+
+// ============ FX ============
+function burstConfetti() {
+  const fx = document.getElementById('fx-layer');
+  const colors = ['#FF6B8B','#FFD54F','#5BC4D8','#A8E0F0','#B22D4F','#FFE066','#2D5F4F'];
+  for (let i = 0; i < 80; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.background = colors[Math.floor(Math.random()*colors.length)];
+    c.style.left = (Math.random()*100) + '%';
+    c.style.top = (Math.random()*-20) + 'vh';
+    c.style.animationDelay = (Math.random()*0.5) + 's';
+    c.style.transform = `rotate(${Math.random()*360}deg)`;
+    if (Math.random() > 0.5) c.style.borderRadius = '50%';
+    fx.appendChild(c);
+    setTimeout(()=>c.remove(), 3000);
+  }
+}
+function coinRain(amt) {
+  const fx = document.getElementById('fx-layer');
+  const startEl = document.getElementById('pill-coins');
+  const startRect = startEl ? startEl.getBoundingClientRect() : { left: window.innerWidth/2, top: 80, width: 60, height: 30 };
+  const count = Math.min(20, Math.max(8, Math.floor(amt/10)));
+  for (let i = 0; i < count; i++) {
+    setTimeout(()=>{
+      const c = document.createElement('div');
+      c.className = 'coin-fly';
+      c.style.left = (window.innerWidth/2 + (Math.random()-0.5)*200) + 'px';
+      c.style.top  = (window.innerHeight*0.35 + (Math.random()-0.5)*100) + 'px';
+      c.style.setProperty('--dx', (startRect.left - window.innerWidth/2 + Math.random()*40) + 'px');
+      c.style.setProperty('--dy', (startRect.top - window.innerHeight*0.35) + 'px');
+      c.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#D4A444" stroke="#8B6418" stroke-width="1.5"/><circle cx="12" cy="12" r="6.5" fill="#FFE066" stroke="#8B6418" stroke-width="1"/><text x="12" y="16" text-anchor="middle" font-size="9" font-weight="900" fill="#8B6418">$</text></svg>`;
+      fx.appendChild(c);
+      sfxCoin();
+      setTimeout(()=>c.remove(), 1300);
+    }, i * 60);
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._tid);
+  showToast._tid = setTimeout(()=> t.classList.remove('show'), 2200);
+}
+
+// ============ TOPBAR ============
+function updateTopbar() {
+  document.getElementById('coin-count').textContent = S.coins;
+  document.getElementById('star-count').textContent = S.stars;
+  document.getElementById('energy-count').textContent = S.energy;
+}
+
+// ============ SHOP ============
+const SHOP_ENERGY = [
+  { key: 'refill_5', amt: 5, costStars: 5 },
+  { key: 'refill_15', amt: 15, costStars: 12 },
+  { key: 'refill_full', amt: 30, costStars: 25 },
+];
+const SHOP_COINS = [
+  { key: 'pack_coins_1', amt: 100, costStars: 10 },
+  { key: 'pack_coins_2', amt: 500, costStars: 40 },
+  { key: 'pack_coins_3', amt: 2000, costStars: 130 },
+];
+function openShop() {
+  const eRows = document.getElementById('shop-energy-rows');
+  eRows.innerHTML = '';
+  SHOP_ENERGY.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    row.innerHTML = `
+      <div class="shop-info">
+        <svg viewBox="0 0 24 24"><path d="M13 2 L4 14 L11 14 L9 22 L19 9 L12 9 Z" fill="#FFD54F" stroke="#7C2D3F" stroke-width="1.5"/></svg>
+        <div>
+          <div class="shop-text">${t(p.key)}</div>
+          <div class="shop-sub">Instant refill</div>
+        </div>
+      </div>
+      <button class="shop-btn" data-energy="${p.key}">
+        <svg viewBox="0 0 24 24"><path d="M12 2 L14.5 9 L22 9.5 L16 14.5 L18 22 L12 17.8 L6 22 L8 14.5 L2 9.5 L9.5 9 Z" fill="#FFD54F"/></svg>
+        ${p.costStars}
+      </button>`;
+    eRows.appendChild(row);
+  });
+  const cRows = document.getElementById('shop-coin-rows');
+  cRows.innerHTML = '';
+  SHOP_COINS.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    row.innerHTML = `
+      <div class="shop-info">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#D4A444" stroke="#8B6418" stroke-width="1.5"/><circle cx="12" cy="12" r="6.5" fill="#FFE066"/></svg>
+        <div>
+          <div class="shop-text">${t(p.key)}</div>
+          <div class="shop-sub">Best value</div>
+        </div>
+      </div>
+      <button class="shop-btn" data-coin="${p.key}">
+        <svg viewBox="0 0 24 24"><path d="M12 2 L14.5 9 L22 9.5 L16 14.5 L18 22 L12 17.8 L6 22 L8 14.5 L2 9.5 L9.5 9 Z" fill="#FFD54F"/></svg>
+        ${p.costStars}
+      </button>`;
+    cRows.appendChild(row);
+  });
+  document.getElementById('shop-modal').classList.remove('hidden');
+}
+function closeShop() { document.getElementById('shop-modal').classList.add('hidden'); }
+
+function buyShopItem(type, key) {
+  const list = type === 'energy' ? SHOP_ENERGY : SHOP_COINS;
+  const item = list.find(x => x.key === key); if (!item) return;
+  if (S.stars < item.costStars) {
+    // TG Stars IAP would happen here; for now show toast
+    if (TG && TG.openInvoice) {
+      showToast('Stars purchase requires bot setup');
+    } else {
+      showToast('Not enough Stars (Stars IAP coming soon)');
+    }
+    sfxWrong();
+    return;
+  }
+  S.stars -= item.costStars;
+  if (type === 'energy') { S.energy = Math.min(S.energyMax, S.energy + item.amt); }
+  else { S.coins += item.amt; }
+  sfxCoin();
+  updateTopbar();
+  saveState();
+  showToast('Purchase complete!');
+}
+
+// ============ MENU ============
+function openMenu() {
+  // Stats
+  const stats = document.getElementById('menu-stats');
+  stats.innerHTML = `
+    <div class="shop-row"><div class="shop-info"><div><div class="shop-text">${t('stat_solved')}</div></div></div><div style="font-weight:900; color:#7C2D3F">${S.totalSolved}</div></div>
+    <div class="shop-row"><div class="shop-info"><div><div class="shop-text">${t('stat_streak')}</div></div></div><div style="font-weight:900; color:#7C2D3F">${S.streak}</div></div>
+    <div class="shop-row"><div class="shop-info"><div><div class="shop-text">${t('stat_merges')}</div></div></div><div style="font-weight:900; color:#7C2D3F">${S.totalMerges}</div></div>
+  `;
+  // Lang
+  const grid = document.getElementById('menu-lang-grid');
+  grid.innerHTML = '';
+  const langs = ['en','ru','es','pt','de','fr','it','tr','ar','hi','id','vi','th','uk','pl','nl','ko','ja','zh','he'];
+  const flags = { en:'EN', ru:'RU', es:'ES', pt:'PT', de:'DE', fr:'FR', it:'IT', tr:'TR', ar:'AR', hi:'HI', id:'ID', vi:'VI', th:'TH', uk:'UA', pl:'PL', nl:'NL', ko:'KO', ja:'JA', zh:'ZH', he:'HE' };
+  langs.forEach(l => {
+    const b = document.createElement('button');
+    b.className = 'btn-secondary';
+    b.style.cssText = 'padding:6px 4px; font-size:12px;' + (LANG === l ? 'background:#7C2D3F;color:white;' : '');
+    b.textContent = flags[l];
+    b.addEventListener('click', () => {
+      LANG = l; S.lang = l; saveState(); applyI18n(); renderCase(); openMenu();
+    });
+    grid.appendChild(b);
+  });
+  // sound
+  const sb = document.getElementById('btn-toggle-sound');
+  sb.textContent = S.soundOn ? t('sound_on') : t('sound_off');
+  document.getElementById('menu-modal').classList.remove('hidden');
+}
+function closeMenu() { document.getElementById('menu-modal').classList.add('hidden'); }
+
+// ============ FTUE ============
+const FTUE_STEPS = [
+  { key: 'ftue_1', highlight: 'spawners' },
+  { key: 'ftue_2', highlight: 'merge-board' },
+  { key: 'ftue_3', highlight: 'case-board' },
+];
+function showFtueStep() {
+  if (S.ftueDone) return;
+  const step = FTUE_STEPS[S.ftueStep];
+  if (!step) { S.ftueDone = true; saveState(); document.getElementById('ftue').classList.add('hidden'); return; }
+  const wrap = document.getElementById('ftue');
+  wrap.innerHTML = `
+    <div class="ftue-bubble">
+      <div class="ftue-mascot">${mascotSvg()}</div>
+      <div class="ftue-text">${t(step.key)}</div>
+      <button class="ftue-btn">${t('ftue_next')}</button>
+    </div>
+  `;
+  wrap.classList.remove('hidden');
+  wrap.querySelector('.ftue-btn').addEventListener('click', () => {
+    sfxButton();
+    wrap.classList.add('hidden');
+  });
+}
+function advanceFtue(toStep) {
+  if (S.ftueDone) return;
+  if (toStep <= S.ftueStep) return;
+  S.ftueStep = toStep;
+  saveState();
+  if (toStep >= FTUE_STEPS.length) { S.ftueDone = true; saveState(); return; }
+  setTimeout(() => showFtueStep(), 400);
+}
+
+// ============ SPLASH / INIT ============
+function init() {
+  // Detect lang
+  LANG = S.lang || detectLang();
+  S.lang = LANG;
+  applyI18n();
+
+  // Splash mascot
+  document.getElementById('splash-mascot').outerHTML = mascotSvg().replace('<svg ', '<svg id="splash-mascot" ');
+  // Tip hat animation
+  setTimeout(()=>{
+    const sm = document.getElementById('splash-mascot');
+    if (sm) sm.classList.add('tip-hat');
+  }, 400);
+
+  document.getElementById('splash-start').addEventListener('click', () => {
+    sfxButton();
+    document.getElementById('splash').classList.add('hidden');
+    document.getElementById('game-screen').classList.remove('hidden');
+    buildBoard();
+    renderCase();
+    updateTopbar();
+    tickEnergy();
+    // Check if deduction was already available
+    const c = getCurrentCase();
+    if (S.cluesSubmitted.length >= c.cluesNeeded) showDeduceCta();
+    // FTUE
+    if (!S.ftueDone) {
+      S.ftueStep = 0;
+      setTimeout(() => showFtueStep(), 400);
+    }
+  });
+
+  // Event delegation
+  document.getElementById('deduce-cta').addEventListener('click', () => { sfxButton(); openDeduction(); });
+  document.getElementById('accuse-btn').addEventListener('click', () => { sfxButton(); doAccuse(); });
+  document.getElementById('btn-shop').addEventListener('click', () => { sfxButton(); openShop(); });
+  document.getElementById('btn-menu').addEventListener('click', () => { sfxButton(); openMenu(); });
+  document.getElementById('pill-coins').addEventListener('click', () => openShop());
+  document.getElementById('pill-stars').addEventListener('click', () => openShop());
+  document.getElementById('solved-next-btn').addEventListener('click', () => { sfxButton(); nextCase(); });
+
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', (e) => {
+    const w = e.currentTarget.getAttribute('data-close');
+    sfxButton();
+    if (w === 'deduction') closeDeduction();
+    if (w === 'shop') closeShop();
+    if (w === 'menu') closeMenu();
+  }));
+
+  // Shop click delegation
+  document.getElementById('shop-modal').addEventListener('click', (e) => {
+    const eBtn = e.target.closest('button[data-energy]');
+    if (eBtn) { buyShopItem('energy', eBtn.getAttribute('data-energy')); return; }
+    const cBtn = e.target.closest('button[data-coin]');
+    if (cBtn) { buyShopItem('coin', cBtn.getAttribute('data-coin')); return; }
+  });
+
+  // Menu sound toggle
+  document.getElementById('btn-toggle-sound').addEventListener('click', () => {
+    S.soundOn = !S.soundOn; saveState();
+    document.getElementById('btn-toggle-sound').textContent = S.soundOn ? t('sound_on') : t('sound_off');
+  });
+
+  // Reset
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    if (confirm('Reset all progress?')) {
+      resetState();
+      LANG = S.lang || 'en';
+      applyI18n();
+      closeMenu();
+      document.getElementById('game-screen').classList.add('hidden');
+      document.getElementById('splash').classList.remove('hidden');
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
